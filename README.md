@@ -52,7 +52,6 @@ flowchart LR
 | `contrato.py` | **Contrato inteligente** com as regras de negócio |
 | `no.py` | Nó local: passa a transação pelo contrato, minera, salva, registra rejeições, reconstrói o estado ao iniciar |
 | `app.py` | Interface Streamlit |
-| `tests/` | Testes automatizados (pytest) |
 
 **Estado derivado da cadeia:** o estado do contrato (emissores e certificados) não é salvo à parte — ao iniciar, o nó reexecuta todas as transações desde o bloco gênesis. A blockchain é a única fonte da verdade.
 
@@ -104,40 +103,11 @@ Requisitos: Python 3.10+.
 ```bash
 pip install -r requirements.txt
 streamlit run app.py          # interface em http://localhost:8501
-python -m pytest -v           # testes
 python main.py                # demo do núcleo no terminal (como o exemplo do professor)
 ```
 
-No Windows também é possível dar dois cliques em `executar.bat` (interface) ou `testes.bat`.
+No Windows também é possível dar dois cliques em `executar.bat`.
 
 Na primeira execução é criada a pasta `dados/` com a blockchain (`blockchain.json`), as carteiras e o log de rejeições. **Para zerar a blockchain, apague a pasta `dados/`.**
 
 Diplomas de exemplo para a demonstração estão em `exemplos/` (inclui uma versão adulterada).
-
-## 8. Testes e resultados
-
-**49 testes automatizados, todos passando** (`python -m pytest -v`):
-
-| Grupo | Qtd | Cobertura |
-|---|---|---|
-| Integridade da blockchain | 7 | encadeamento, prova de trabalho, adulteração de dados, atacante que "remina" um bloco, bloco sem PoW, salvar/carregar |
-| Operações válidas | 9 | autorizar emissor, emitir (estado muda), verificar pelo PDF, conferir titular, revogar (emissor e admin), remover emissor |
-| Sem permissão | 6 | aluno autorizando/emitindo, emissor não autorizado ou removido, outro emissor revogando, emissor removendo emissor |
-| Entradas inválidas | 20 | código, hashes, curso, carga horária e data inválidos; duplicidade de código e documento; revogar inexistente, duas vezes ou sem motivo; operação desconhecida; rejeição não cria bloco |
-| Segurança | 5 | transação alterada após assinatura, falsificação de remetente, *replay*, transação mal formada, nó com cadeia adulterada |
-| Persistência | 2 | reinício reconstrói o estado; arquivo adulterado detectado ao iniciar |
-
-## 9. Roteiro da demonstração
-
-1. `streamlit run app.py` — mostrar o bloco gênesis na aba **Blockchain** (cadeia íntegra).
-2. Conta **Reitoria** → aba **Emissores** → autorizar a *Secretaria Acadêmica EST* → bloco #1 minerado.
-3. Conta **Secretaria EST** → aba **Emitir** → `exemplos/diploma_ana_souza.pdf` → bloco #2 (confirmação com hash e nonce).
-4. Aba **Verificar** → arrastar o PDF original (✅ autêntico) e o `_ADULTERADO` (❌ não encontrado).
-5. Conta **Carlos (aluno)** → tentar emitir → ❌ rejeitado (regra E1); ver na aba **Rejeitadas**.
-6. Conta **Secretaria EST** → **Revogar** → verificar de novo pelo código (🚫 revogado — alteração de estado).
-7. Aba **Blockchain** → *simular adulteração* → cadeia inválida no bloco #2 → **Restaurar do disco**.
-
-## Referências
-
-- Exemplo de blockchain em Java e aplicação em Python disponibilizados pelo professor (base de `block.py` e `blockchain.py`).
-- Anders Brownworth — *Blockchain Demo*.
