@@ -28,6 +28,7 @@ no = obter_no()
 # ------------------------------------------------------------------ sessão / login
 st.session_state.setdefault("carteira_autenticada", None)
 st.session_state.setdefault("resultado", None)
+st.session_state.setdefault("verificacao_publica", False)
 
 
 def logado():
@@ -123,10 +124,64 @@ def cartao_certificado(c):
                  hide_index=True, use_container_width=True)
 
 
+def secao_verificacao(no):
+    """UI de verificação pública de certificados (por PDF ou por código).
+    Somente consulta — não cria transações."""
+    st.header("Verificar certificado")
+    st.caption("Consulta pública: qualquer pessoa pode verificar, sem conta e sem transação.")
+    col_pdf, col_cod = st.columns(2)
+    with col_pdf:
+        st.subheader("Pelo arquivo PDF")
+        pdf_v = st.file_uploader("Arraste o diploma recebido", type=["pdf"], key="pdf_verificar")
+        if pdf_v:
+            h = hash_arquivo(pdf_v.getvalue())
+            st.caption(f"SHA-256 calculado: `{h}`")
+            cartao_certificado(no.contrato.verificar_documento(h))
+    with col_cod:
+        st.subheader("Pelo código")
+        cod_v = st.text_input("Código impresso no diploma", placeholder="UEA-2026-0001")
+        if cod_v:
+            cert_v = no.contrato.consultar(cod_v.strip().upper())
+            cartao_certificado(cert_v)
+            if cert_v:
+                with st.expander("Conferir titular (nome + matrícula)"):
+                    n = st.text_input("Nome", key="tit_nome")
+                    m = st.text_input("Matrícula", key="tit_mat")
+                    if n and m:
+                        if hash_titular(n, m) == cert_v["titular_hash"]:
+                            st.success("Titular confere ✅")
+                        else:
+                            st.error("Titular NÃO confere ❌")
+    st.divider()
+    st.subheader("Estado do contrato — certificados registrados")
+    if no.contrato.certificados:
+        st.dataframe(pd.DataFrame([{
+            "Código": c["codigo"], "Status": c["status"], "Curso": c["curso"],
+            "Instituição": c["instituicao"], "Bloco": c["emitido_no_bloco"],
+            "Hash do documento": c["documento_hash"][:16] + "…"} for c in no.contrato.certificados.values()]),
+            hide_index=True, use_container_width=True)
+    else:
+        st.info("Nenhum certificado emitido ainda.")
+
+
+def mostrar_verificacao_publica():
+    aplicar_estilo()
+    st.title("🎓 CertChain UEA — Verificação pública")
+    st.caption("Confira a autenticidade de um diploma sem precisar de conta.")
+    if st.button("← Voltar ao login"):
+        st.session_state["verificacao_publica"] = False
+        st.rerun()
+    st.divider()
+    secao_verificacao(no)
+
+
 def mostrar_tela_login():
     aplicar_estilo()
     st.title("🎓 CertChain UEA")
     st.caption("Sistema de certificados acadêmicos em blockchain")
+    if st.button("🔎 Verificar diploma sem entrar"):
+        st.session_state["verificacao_publica"] = True
+        st.rerun()
 
     usuarios = no.listar_usuarios()
     metricas = st.columns(3)
@@ -274,41 +329,7 @@ def mostrar_dashboard():
             exibir_resultado("emitir")
 
     with aba_de["🔎 Verificar"]:
-        st.header("Verificar certificado")
-        st.caption("Consulta pública: qualquer pessoa pode verificar, sem conta e sem transação.")
-        col_pdf, col_cod = st.columns(2)
-        with col_pdf:
-            st.subheader("Pelo arquivo PDF")
-            pdf_v = st.file_uploader("Arraste o diploma recebido", type=["pdf"], key="pdf_verificar")
-            if pdf_v:
-                h = hash_arquivo(pdf_v.getvalue())
-                st.caption(f"SHA-256 calculado: `{h}`")
-                cartao_certificado(no.contrato.verificar_documento(h))
-        with col_cod:
-            st.subheader("Pelo código")
-            cod_v = st.text_input("Código impresso no diploma", placeholder="UEA-2026-0001")
-            if cod_v:
-                cert_v = no.contrato.consultar(cod_v.strip().upper())
-                cartao_certificado(cert_v)
-                if cert_v:
-                    with st.expander("Conferir titular (nome + matrícula)"):
-                        n = st.text_input("Nome", key="tit_nome")
-                        m = st.text_input("Matrícula", key="tit_mat")
-                        if n and m:
-                            if hash_titular(n, m) == cert_v["titular_hash"]:
-                                st.success("Titular confere ✅")
-                            else:
-                                st.error("Titular NÃO confere ❌")
-        st.divider()
-        st.subheader("Estado do contrato — certificados registrados")
-        if no.contrato.certificados:
-            st.dataframe(pd.DataFrame([{
-                "Código": c["codigo"], "Status": c["status"], "Curso": c["curso"],
-                "Instituição": c["instituicao"], "Bloco": c["emitido_no_bloco"],
-                "Hash do documento": c["documento_hash"][:16] + "…"} for c in no.contrato.certificados.values()]),
-                hide_index=True, use_container_width=True)
-        else:
-            st.info("Nenhum certificado emitido ainda.")
+        secao_verificacao(no)
 
     if "🚫 Revogar" in aba_de:
         with aba_de["🚫 Revogar"]:
@@ -418,6 +439,9 @@ def mostrar_dashboard():
 
 
 if logado() is None:
-    mostrar_tela_login()
+    if st.session_state.get("verificacao_publica"):
+        mostrar_verificacao_publica()
+    else:
+        mostrar_tela_login()
 else:
     mostrar_dashboard()

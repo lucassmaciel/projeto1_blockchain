@@ -16,7 +16,6 @@
 #     `st.session_state` daquela sessão específica.
 import json
 import os
-import secrets
 import time
 from pathlib import Path
 
@@ -28,43 +27,28 @@ from transacao import criar_transacao
 ARQUIVO_CREDENCIAIS = Path(__file__).resolve().parent / "secrets" / "usuarios_demo.json"
 
 
-def _gerar_credenciais_demo():
-    contas = [
-        ("Reitoria UEA (administrador)", secrets.token_urlsafe(18)),
-        ("Secretaria Acadêmica EST/UEA", secrets.token_urlsafe(18)),
-        ("Secretaria Acadêmica ESA/UEA", secrets.token_urlsafe(18)),
-        ("Carlos — aluno (sem permissão)", secrets.token_urlsafe(18)),
-    ]
+CONTAS_PADRAO = [
+    ("Reitoria UEA (administrador)", "reitoria123"),
+    ("Secretaria Acadêmica EST/UEA", "est-2026"),
+    ("Secretaria Acadêmica ESA/UEA", "esa-2026"),
+    ("Carlos — aluno (sem permissão)", "carlos123"),
+]
+
+
+def _escrever_credenciais_referencia():
+    """Escreve secrets/usuarios_demo.json como REFERÊNCIA a partir de CONTAS_PADRAO.
+    Este arquivo nunca é lido para obter senha — a fonte da verdade é CONTAS_PADRAO."""
     ARQUIVO_CREDENCIAIS.parent.mkdir(parents=True, exist_ok=True)
     with open(ARQUIVO_CREDENCIAIS, "w", encoding="utf-8") as f:
-        json.dump({"usuarios": [{"nome": nome, "senha": senha} for nome, senha in contas]}, f, ensure_ascii=False, indent=2)
+        json.dump({"usuarios": [{"nome": nome, "senha": senha} for nome, senha in CONTAS_PADRAO]},
+                  f, ensure_ascii=False, indent=2)
     try:
         os.chmod(ARQUIVO_CREDENCIAIS, 0o600)
     except OSError:
         pass
-    return contas
 
 
-def _carregar_credenciais_demo():
-    if not ARQUIVO_CREDENCIAIS.exists():
-        return _gerar_credenciais_demo()
-
-    try:
-        with open(ARQUIVO_CREDENCIAIS, "r", encoding="utf-8") as f:
-            dados = json.load(f)
-        usuarios = dados.get("usuarios", [])
-        if not usuarios:
-            return _gerar_credenciais_demo()
-        contas = [(u["nome"], u["senha"]) for u in usuarios if "nome" in u and "senha" in u]
-        if len(contas) == len({nome for nome, _ in contas}):
-            return contas
-    except (json.JSONDecodeError, OSError, KeyError, TypeError):
-        pass
-
-    return _gerar_credenciais_demo()
-
-
-CONTAS_PADRAO = _carregar_credenciais_demo()
+_escrever_credenciais_referencia()
 
 
 class No:

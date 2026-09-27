@@ -110,4 +110,19 @@ No Windows também é possível dar dois cliques em `executar.bat`.
 
 Na primeira execução é criada a pasta `dados/` com a blockchain (`blockchain.json`), as carteiras e o log de rejeições. **Para zerar a blockchain, apague a pasta `dados/`.**
 
+### Credenciais de demonstração
+
+Contas pré-criadas para testar cada papel (senhas fixas de demonstração):
+
+| Conta | Papel | Senha |
+|---|---|---|
+| Reitoria UEA (administrador) | Administrador | `reitoria123` |
+| Secretaria Acadêmica EST/UEA | Emissor | `est-2026` |
+| Secretaria Acadêmica ESA/UEA | Emissor | `esa-2026` |
+| Carlos — aluno (sem permissão) | Sem permissão | `carlos123` |
+
+Também é possível **cadastrar novos alunos** na tela de login e **verificar diplomas sem entrar** pelo botão "🔎 Verificar diploma sem entrar".
+
+> Se você já rodou uma versão anterior (com senhas aleatórias), apague as pastas `dados/` e `secrets/` uma vez para as senhas fixas acima passarem a valer.
+
 Diplomas de exemplo para a demonstração estão em `exemplos/` (inclui uma versão adulterada).

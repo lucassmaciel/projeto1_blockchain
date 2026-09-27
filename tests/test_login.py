@@ -83,3 +83,20 @@ def test_registra_novo_aluno_com_matricula_e_login(tmp_path):
     usuario = next(u for u in no_obj.listar_usuarios() if u["nome"] == "Carlos Santos")
     assert usuario["matricula"] == "2026001"
     assert no_obj.autenticar(cadastro["endereco"], "carlos123") is not None
+
+
+def test_admin_autentica_com_senha_fixa_conhecida(tmp_path):
+    pasta = tmp_path / "demo"
+    no_obj = No(str(pasta), dificuldade=1)
+
+    admin = next(u for u in no_obj.listar_usuarios() if u["papel"] == "ADMINISTRADOR")
+    assert no_obj.autenticar(admin["endereco"], "reitoria123") is not None
+    assert no_obj.autenticar(admin["endereco"], "senha-errada") is None
+
+
+def test_contas_padrao_usam_senhas_fixas():
+    senhas = {nome: senha for nome, senha in no.CONTAS_PADRAO}
+    assert senhas["Reitoria UEA (administrador)"] == "reitoria123"
+    assert senhas["Secretaria Acadêmica EST/UEA"] == "est-2026"
+    assert senhas["Secretaria Acadêmica ESA/UEA"] == "esa-2026"
+    assert senhas["Carlos — aluno (sem permissão)"] == "carlos123"
