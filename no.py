@@ -29,9 +29,9 @@ ARQUIVO_CREDENCIAIS = Path(__file__).resolve().parent / "secrets" / "usuarios_de
 
 CONTAS_PADRAO = [
     ("Reitoria UEA (administrador)", "reitoria123"),
-    ("Secretaria Acadêmica EST/UEA", "est-2026"),
-    ("Secretaria Acadêmica ESA/UEA", "esa-2026"),
-    ("Carlos — aluno (sem permissão)", "carlos123"),
+    ("Secretaria Acadêmica EST/UEA", "est123"),
+    ("Secretaria Acadêmica ESA/UEA", "esa123"),
+    ("Carlos", "carlos123"),
 ]
 
 
@@ -66,43 +66,57 @@ class No:
         self._dados_carteiras = self._carregar_ou_criar_carteiras_demo()
         self.carteiras = [Carteira.from_dict(d) for d in self._dados_carteiras]
 
+        self.rejeitadas = []
+        if os.path.exists(self.arq_rejeitadas):
+            with open(self.arq_rejeitadas, encoding="utf-8") as f:
+                self.rejeitadas = json.load(f)
+
+        if os.path.exists(self.arq_cadeia) and self._cadeia_compativel():
+            self.restaurar_do_disco()
+        else:
+            self._resetar_demo()
+
+        self._sincronizar_alunos()
+
+    def _sincronizar_alunos(self):
+        """Garante uma carteira para cada aluno cadastrado e grava o endereço dela em usuarios.json.
+        Roda depois de as carteiras padrão estarem definitivas (inclusive após um reset)."""
         for usuario in self.usuarios:
             if str(usuario.get("tipo", "ALUNO")).upper() != "ALUNO":
                 continue
             nome = (usuario.get("nome") or "").strip()
             if not nome:
                 continue
-            if any(d.get("nome") == nome for d in self._dados_carteiras):
+            existente = next((d for d in self._dados_carteiras if d.get("nome") == nome), None)
+            if existente:
+                usuario["endereco"] = existente["endereco"]
                 continue
             carteira = Carteira.criar(nome, str(usuario.get("senha") or ""))
             self._dados_carteiras.append(carteira.to_dict())
             self.carteiras.append(carteira)
             usuario["endereco"] = carteira.endereco
         salvar_carteiras([Carteira.from_dict(d) for d in self._dados_carteiras], self.arq_carteiras)
+        with open(self.arq_usuarios, "w", encoding="utf-8") as f:
+            json.dump(self.usuarios, f, ensure_ascii=False, indent=2)
 
-        self.rejeitadas = []
-        if os.path.exists(self.arq_rejeitadas):
-            with open(self.arq_rejeitadas, encoding="utf-8") as f:
-                self.rejeitadas = json.load(f)
-
-        if os.path.exists(self.arq_cadeia):
-            self.restaurar_do_disco()
-            if getattr(self, "contrato", None) is not None and self.contrato.admin != self.carteiras[0].endereco:
-                self._resetar_demo()
-        else:
-            self._resetar_demo()
-
-        self._garantir_usuarios_demo()
+    def _cadeia_compativel(self):
+        """A cadeia salva só é reaproveitada se o gênesis for desta versão (com emissores
+        iniciais) e o administrador for a carteira atual; senão, é de uma versão antiga."""
+        try:
+            genesis = Blockchain.load(self.arq_cadeia).blocks[0].data
+        except (OSError, ValueError, KeyError, IndexError):
+            return False
+        return "emissores_iniciais" in genesis and genesis.get("admin") == self.carteiras[0].endereco
 
     def _carregar_ou_criar_carteiras_demo(self):
         if os.path.exists(self.arq_carteiras):
             try:
                 dados = carregar_carteiras_bruto(self.arq_carteiras)
-                if dados and all(isinstance(d, dict) for d in dados):
+                if dados and all(isinstance(d, dict) and "chave_privada_cifrada" in d for d in dados):
                     for d in dados:
                         Carteira.from_dict(d)
                     nomes = [d["nome"] for d in dados]
-                    if nomes == [n for n, _ in CONTAS_PADRAO]:
+                    if nomes[:len(CONTAS_PADRAO)] == [n for n, _ in CONTAS_PADRAO]:
                         return dados
             except (TypeError, ValueError, KeyError):
                 pass
@@ -113,15 +127,20 @@ class No:
 
     def _resetar_demo(self):
         criadas = [Carteira.criar(nome, senha) for nome, senha in CONTAS_PADRAO]
-        salvar_carteiras(criadas, self.arq_carteiras)
-        self._dados_carteiras = [c.to_dict() for c in criadas]
+        alunos = self._dados_carteiras[len(CONTAS_PADRAO):]  # preserva carteiras de alunos cadastrados
+        self._dados_carteiras = [c.to_dict() for c in criadas] + alunos
         self.carteiras = [Carteira.from_dict(d) for d in self._dados_carteiras]
+        salvar_carteiras(self.carteiras, self.arq_carteiras)
 
+        # O gênesis define o administrador e os emissores iniciais (secretarias EST e ESA).
+        # Assim a permissão delas está NA blockchain e sobrevive à reexecução da cadeia.
         admin = self.carteiras[0].endereco
+        emissores_iniciais = [{"endereco": c.endereco, "nome": c.nome} for c in self.carteiras[1:3]]
         self.cadeia = Blockchain(self.dificuldade, genesis_data={
             "tipo": "GENESIS", "rede": "CertChain UEA", "admin": admin,
+            "emissores_iniciais": emissores_iniciais,
             "descricao": "Registro de certificados acadêmicos"})
-        self.contrato = ContratoCertificados(admin)
+        self.contrato = ContratoCertificados(admin, emissores_iniciais)
         self.cadeia.save(self.arq_cadeia)
 
         if os.path.exists(self.arq_rejeitadas):
@@ -133,7 +152,8 @@ class No:
     @staticmethod
     def reconstruir_estado(cadeia):
         """Reexecuta todas as transações desde o gênesis para obter o estado do contrato."""
-        contrato = ContratoCertificados(cadeia.blocks[0].data["admin"])
+        genesis = cadeia.blocks[0].data
+        contrato = ContratoCertificados(genesis["admin"], genesis.get("emissores_iniciais", ()))
         for bloco in cadeia.blocks[1:]:
             contrato.executar(bloco.data, bloco.index)
         return contrato
@@ -150,33 +170,10 @@ class No:
         mostrar nome/papel. Nunca use o retorno desta função para assinar."""
         return next((c for c in self.carteiras if c.endereco == endereco), None)
 
-    def _garantir_usuarios_demo(self):
-        """Cria as permissões iniciais do cenário demo do projeto.
-
-        Em vez de depender de uma transação de autorização no momento do bootstrap,
-        o contrato usa o estado inicial do ambiente de demonstração diretamente. Isso
-        mantém a lógica real da blockchain intacta e garante que os usuários demo
-        recebam os papéis corretos ao iniciar a aplicação.
-        """
-        if self.contrato.emissores:
-            return
-
-        for nome, _ in CONTAS_PADRAO[1:3]:
-            carteira = next((c for c in self.carteiras if c.nome == nome), None)
-            if carteira is None:
-                continue
-            self.contrato.emissores[carteira.endereco] = {
-                "endereco": carteira.endereco,
-                "nome": carteira.nome,
-                "ativo": True,
-                "autorizado_no_bloco": 0,
-                "removido_no_bloco": None,
-            }
-
     def _carregar_usuarios(self):
         if not os.path.exists(self.arq_usuarios):
             usuarios = [{
-                "nome": "Carlos — aluno (sem permissão)",
+                "nome": "Carlos",
                 "matricula": "2026001",
                 "senha": "carlos123",
                 "tipo": "ALUNO",
@@ -192,7 +189,7 @@ class No:
                 raise ValueError("arquivo de usuários inválido")
             if not usuarios:
                 usuarios = [{
-                    "nome": "Carlos — aluno (sem permissão)",
+                    "nome": "Carlos",
                     "matricula": "2026001",
                     "senha": "carlos123",
                     "tipo": "ALUNO",
@@ -202,7 +199,7 @@ class No:
             return usuarios
         except (json.JSONDecodeError, OSError, TypeError, ValueError):
             usuarios = [{
-                "nome": "Carlos — aluno (sem permissão)",
+                "nome": "Carlos",
                 "matricula": "2026001",
                 "senha": "carlos123",
                 "tipo": "ALUNO",
@@ -252,6 +249,8 @@ class No:
         senha_por_nome = {nome: senha for nome, senha in CONTAS_PADRAO}
         for usuario in self.usuarios:
             nome = usuario.get("nome")
+            if nome in senha_por_nome:
+                continue  # contas padrão (ex.: Carlos) são listadas abaixo, com o papel do contrato
             if nome and str(usuario.get("tipo", "ALUNO")).upper() == "ALUNO":
                 endereco = usuario.get("endereco")
                 if endereco:
@@ -262,8 +261,11 @@ class No:
                         "senha": usuario.get("senha"),
                         "matricula": usuario.get("matricula"),
                     })
+        vistos = {u["endereco"] for u in usuarios}
         for dados in self._dados_carteiras:
             carteira = Carteira.from_dict(dados)
+            if carteira.endereco in vistos:
+                continue
             papel = self.contrato.papel(carteira.endereco) if hasattr(self, "contrato") else "SEM PERMISSÃO"
             usuarios.append({
                 "nome": carteira.nome,

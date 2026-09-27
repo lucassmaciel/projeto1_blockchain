@@ -65,9 +65,13 @@ def _texto(payload, campo, regra, minimo, maximo):
 
 
 class ContratoCertificados:
-    def __init__(self, admin):
+    def __init__(self, admin, emissores_iniciais=()):
+        """`emissores_iniciais` vem do bloco gênesis: [{endereco, nome}, ...]."""
         self.admin = admin
         self.emissores = {}          # endereco -> {nome, ativo, autorizado_no_bloco, removido_no_bloco}
+        for e in emissores_iniciais:
+            self.emissores[e["endereco"]] = {"endereco": e["endereco"], "nome": e["nome"], "ativo": True,
+                                             "autorizado_no_bloco": 0, "removido_no_bloco": None}
         self.certificados = {}       # codigo -> dados do certificado
         self.codigo_por_hash = {}    # documento_hash -> codigo
         self.nonces = {}             # endereco -> último nonce usado
