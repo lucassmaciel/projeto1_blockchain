@@ -111,12 +111,12 @@ def cartao_certificado(c):
     else:
         rv = c["revogacao"]
         st.error(f"🚫 Certificado **REVOGADO** no bloco #{rv['bloco']} — motivo: {rv['motivo']}")
-    st.write(f"**Curso:** {c['curso']} \n"
-             f"**Carga horária:** {c['carga_horaria']} h \n"
-             f"**Conclusão:** {date.fromisoformat(c['data_conclusao']).strftime('%d/%m/%Y')} \n"
-             f"**Instituição emissora:** {c['instituicao']} \n"
-             f"**Emissor (endereço):** `{c['emissor']}` \n"
-             f"**Registrado no bloco:** #{c['emitido_no_bloco']} em {quando(c['emitido_em'])} \n"
+    st.write(f"**Curso:** {c['curso']}  \n"
+             f"**Carga horária:** {c['carga_horaria']} h  \n"
+             f"**Conclusão:** {date.fromisoformat(c['data_conclusao']).strftime('%d/%m/%Y')}  \n"
+             f"**Instituição emissora:** {c['instituicao']}  \n"
+             f"**Emissor (endereço):** `{c['emissor']}`  \n"
+             f"**Registrado no bloco:** #{c['emitido_no_bloco']} em {quando(c['emitido_em'])}  \n"
              f"**Hash do documento:** `{c['documento_hash']}`")
     st.caption("Histórico na blockchain")
     st.dataframe(pd.DataFrame([{"Bloco": h["bloco"], "Operação": h["operacao"], "Por": nome_conta(h["por"]),
@@ -415,8 +415,8 @@ def mostrar_dashboard():
                     titulo += f" · assinado por {nome_conta(b.data.get('remetente'))}"
                 st.markdown(titulo + (" :red[**⚠ inválido**]" if invalido and b.index == idx_inv else ""))
                 z = no.cadeia.difficulty
-                st.markdown(f"hash: `{b.hash[:z]}`**`{b.hash[z:]}`** \n"
-                            f"hash anterior: `{b.previous_hash}` \n"
+                st.markdown(f"hash: `{b.hash[:z]}`**`{b.hash[z:]}`**  \n"
+                            f"hash anterior: `{b.previous_hash}`  \n"
                             f"nonce: `{b.nonce}` · minerado em {quando(b.timestamp)}")
                 with st.expander("Dados do bloco"):
                     st.json(b.data.get("payload", b.data))
