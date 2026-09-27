@@ -59,7 +59,8 @@ flowchart LR
 
 Papéis:
 - **Administrador** (Reitoria) — definido no bloco gênesis; autoriza e remove emissores.
-- **Emissor** (secretarias acadêmicas) — emite e revoga certificados.
+- **Emissor** (secretarias acadêmicas) — emite e revoga certificados. As secretarias EST e ESA já nascem autorizadas: elas estão registradas no próprio bloco gênesis (`emissores_iniciais`), então a permissão também está na blockchain.
+- **Sem permissão** (ex.: Carlos) — pode entrar e consultar, mas o contrato rejeita qualquer emissão ou revogação.
 - **Público** — verifica certificados (consulta, sem transação).
 
 Toda transação é validada **por inteiro antes** de alterar o estado; se qualquer regra falhar, ela é rejeitada e **nenhum bloco é criado**.
@@ -94,7 +95,7 @@ Toda transação é validada **por inteiro antes** de alterar o estado; se qualq
 
 Com isso a verificação é pública sem expor dados pessoais (LGPD): quem tem o PDF e/ou o nome + matrícula consegue conferir; quem só olha a cadeia vê apenas hashes.
 
-> Nesta versão de demonstração as chaves privadas das 4 contas ficam em `dados/carteiras.json` (como as contas pré-criadas do Ganache/Hardhat). Em produção cada instituição guardaria sua própria chave.
+> Nesta versão de demonstração as chaves privadas ficam em `dados/carteiras.json`, **cifradas com a senha de cada conta** (PBKDF2 + Fernet): o login é justamente decifrar a chave para poder assinar. Em produção cada instituição guardaria sua própria chave.
 
 ## 7. Como executar
 
@@ -117,12 +118,12 @@ Contas pré-criadas para testar cada papel (senhas fixas de demonstração):
 | Conta | Papel | Senha |
 |---|---|---|
 | Reitoria UEA (administrador) | Administrador | `reitoria123` |
-| Secretaria Acadêmica EST/UEA | Emissor | `est-2026` |
-| Secretaria Acadêmica ESA/UEA | Emissor | `esa-2026` |
-| Carlos — aluno (sem permissão) | Sem permissão | `carlos123` |
+| Secretaria Acadêmica EST/UEA | Emissor | `est123` |
+| Secretaria Acadêmica ESA/UEA | Emissor | `esa123` |
+| Carlos | Sem permissão | `carlos123` |
 
 Também é possível **cadastrar novos alunos** na tela de login e **verificar diplomas sem entrar** pelo botão "🔎 Verificar diploma sem entrar".
 
-> Se você já rodou uma versão anterior (com senhas aleatórias), apague as pastas `dados/` e `secrets/` uma vez para as senhas fixas acima passarem a valer.
+> Se você já rodou uma versão anterior, apague as pastas `dados/` e `secrets/` uma vez para as contas e senhas acima passarem a valer.
 
 Diplomas de exemplo para a demonstração estão em `exemplos/` (inclui uma versão adulterada).

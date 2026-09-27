@@ -50,9 +50,9 @@ def test_recria_carteiras_quando_senha_foi_alterada_e_arquivo_stale_persistiu(tm
 
     contas_antigas = [
         ("Reitoria UEA (administrador)", "reitoria123"),
-        ("Secretaria Acadêmica EST/UEA", "est-2026"),
-        ("Secretaria Acadêmica ESA/UEA", "esa-2026"),
-        ("Carlos — aluno (sem permissão)", "carlos123"),
+        ("Secretaria Acadêmica EST/UEA", "est123"),
+        ("Secretaria Acadêmica ESA/UEA", "esa123"),
+        ("Carlos", "carlos123"),
     ]
     salvar_carteiras([Carteira.criar(nome, senha) for nome, senha in contas_antigas], str(pasta / "carteiras.json"))
 
@@ -60,7 +60,7 @@ def test_recria_carteiras_quando_senha_foi_alterada_e_arquivo_stale_persistiu(tm
         ("Reitoria UEA (administrador)", "nova-reitoria-2026"),
         ("Secretaria Acadêmica EST/UEA", "nova-est-2026"),
         ("Secretaria Acadêmica ESA/UEA", "nova-esa-2026"),
-        ("Carlos — aluno (sem permissão)", "nova-carlos-2026"),
+        ("Carlos", "nova-carlos-2026"),
     ]
     monkeypatch.setattr(no, "CONTAS_PADRAO", senhas_novas)
 
@@ -97,6 +97,6 @@ def test_admin_autentica_com_senha_fixa_conhecida(tmp_path):
 def test_contas_padrao_usam_senhas_fixas():
     senhas = {nome: senha for nome, senha in no.CONTAS_PADRAO}
     assert senhas["Reitoria UEA (administrador)"] == "reitoria123"
-    assert senhas["Secretaria Acadêmica EST/UEA"] == "est-2026"
-    assert senhas["Secretaria Acadêmica ESA/UEA"] == "esa-2026"
-    assert senhas["Carlos — aluno (sem permissão)"] == "carlos123"
+    assert senhas["Secretaria Acadêmica EST/UEA"] == "est123"
+    assert senhas["Secretaria Acadêmica ESA/UEA"] == "esa123"
+    assert senhas["Carlos"] == "carlos123"
