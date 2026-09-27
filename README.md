@@ -1,130 +1,84 @@
-# CertChain UEA: diplomas acadêmicos em blockchain
+# CertChain UEA
 
-Trabalho do 1º bimestre da disciplina Oficina de Desenvolvimento de Sistemas III (UEA).
+Projeto do 1º bimestre de Oficina de Desenvolvimento de Sistemas III (UEA). Registramos diplomas em uma blockchain local, e um contrato inteligente define quem pode emitir e revogar. Qualquer pessoa confere se um diploma é verdadeiro.
 
-O CertChain registra diplomas em uma blockchain local. Um contrato inteligente decide quem pode emitir e revogar, e qualquer pessoa consegue conferir se um diploma é autêntico.
+## Problema
 
-## 1. Problema
+Hoje o diploma circula como PDF, e qualquer editor de PDF troca o curso ou a carga horária em poucos minutos. Para conferir, a empresa precisa falar com a secretaria da universidade, o que só anda em horário comercial. E o sistema da secretaria é central: quem tem acesso de administrador consegue mudar um registro sem que ninguém perceba.
 
-Um diploma em PDF é fácil de editar: dá para trocar o curso, a carga horária ou o nome em poucos minutos. Para conferir, a empresa precisa falar com a secretaria da universidade, o que demora e só funciona em horário comercial. E o sistema da secretaria é um banco de dados central, onde quem tem acesso de administrador consegue alterar ou apagar um registro sem que ninguém perceba.
+## Como o CertChain resolve
 
-## 2. Solução
+A secretaria preenche os dados do aluno e o sistema gera o PDF do diploma. O hash SHA-256 desse arquivo vai para a blockchain numa transação que a secretaria assina com a chave dela.
 
-A secretaria acadêmica preenche os dados do aluno e o sistema gera o PDF do diploma. O hash SHA-256 desse PDF vai para a blockchain dentro de uma transação assinada pela secretaria.
+Quem recebe o diploma abre a tela de verificação e envia o PDF. Se o hash estiver registrado e ativo, o diploma é autêntico. Basta mudar um byte do arquivo para o hash mudar e o sistema deixar de reconhecê-lo.
 
-Quem recebe o diploma (uma empresa, outra universidade) arrasta o PDF na tela de verificação. Se o hash bater com um registro ativo, o diploma é autêntico. Se alguém mudou um único byte do arquivo, o hash muda e o sistema não reconhece o documento.
+A Reitoria decide quais secretarias podem emitir. Se um diploma sair com erro, a secretaria revoga, e o histórico guarda a emissão e a revogação.
 
-A Reitoria, como administradora, define quais setores podem emitir. Um diploma emitido por engano pode ser revogado, e tanto a emissão quanto a revogação continuam no histórico.
+## Por que blockchain
 
-## 3. Por que usar blockchain
+Num banco de dados comum, o administrador edita um registro e ninguém fica sabendo. Na blockchain, cada bloco carrega o hash do bloco anterior. Se alguém edita um registro antigo, a validação da cadeia aponta o bloco adulterado. Cada transação também leva a assinatura digital (Ed25519) de quem a enviou, então dá para saber quem emitiu cada diploma. As regras ficam no contrato, que as aplica do mesmo jeito para todo mundo, e na cadeia só entram hashes, o que permite verificar sem expor dados pessoais.
 
-| O que precisamos | Como a blockchain resolve |
-|---|---|
-| Registro que não muda depois de emitido | Cada bloco guarda o hash do anterior. Se alguém altera um bloco, a validação acusa a quebra da cadeia |
-| Saber quem emitiu cada diploma | Cada transação leva a assinatura digital (Ed25519) de quem a enviou |
-| Regras iguais para todos | O contrato inteligente confere as regras antes de qualquer registro |
-| Histórico para auditoria | Emissões, revogações e mudanças de permissão ficam na cadeia, em ordem |
-| Verificação pública sem expor dados pessoais | Na cadeia só entram hashes (LGPD) |
-
-Num banco de dados comum, o administrador pode editar um registro sem deixar rastro. Aqui, uma alteração dessas faz a validação da cadeia falhar.
-
-## 4. Arquitetura
+## Arquitetura
 
 ```mermaid
 flowchart LR
-    U[Usuário<br/>Streamlit app.py] -->|login + operação| N[Nó local<br/>no.py]
-    N -->|assina com a carteira| T[Transação assinada<br/>transacao.py + carteira.py]
-    T --> C{Contrato inteligente<br/>contrato.py}
-    C -->|regra violada| R[Log de rejeitadas<br/>fora da cadeia]
-    C -->|regras OK| M[Novo bloco + prova de trabalho<br/>block.py]
-    M --> B[(Blockchain<br/>blockchain.py<br/>dados/blockchain.json)]
-    B -->|reexecuta transações| E[Estado do contrato<br/>emissores e diplomas]
+    U[Usuário<br/>app.py] -->|login + operação| N[Nó local<br/>no.py]
+    N -->|assina| T[Transação<br/>transacao.py]
+    T --> C{Contrato<br/>contrato.py}
+    C -->|regra violada| R[Log de rejeitadas]
+    C -->|regras OK| M[Bloco + prova de trabalho<br/>block.py]
+    M --> B[(Blockchain<br/>blockchain.py)]
+    B -->|reexecuta as transações| E[Estado do contrato]
     E --> U
 ```
 
-| Arquivo | O que faz |
+| Arquivo | Função |
 |---|---|
-| `block.py` | Bloco com índice, timestamp, hash anterior, dados, nonce, hash SHA-256 e prova de trabalho. Partimos do exemplo do professor |
-| `blockchain.py` | Cadeia: bloco gênesis, mineração, validação (elo, hash e prova de trabalho) e gravação em JSON |
-| `carteira.py` | Identidade de cada conta: um par de chaves Ed25519. A chave privada fica cifrada com a senha, e fazer login é decifrá-la. O endereço `0x...` vem da chave pública |
-| `transacao.py` | Transação assinada: tipo, remetente, chave pública, nonce, timestamp, payload e assinatura |
+| `block.py`, `blockchain.py` | Blocos, prova de trabalho, validação da cadeia e gravação em disco. A base veio do exemplo que o professor passou em aula |
+| `carteira.py` | Par de chaves Ed25519 de cada conta. A chave privada fica cifrada com a senha, e o login consiste em decifrá-la |
+| `transacao.py` | Monta e assina as transações |
 | `contrato.py` | Contrato inteligente com as regras de negócio |
-| `no.py` | Nó local. Cuida do login e do cadastro, passa a transação pelo contrato, minera, salva e registra as rejeições. Ao iniciar, reconstrói o estado a partir da cadeia |
-| `diploma.py` | Gera o PDF do diploma a partir dos dados do formulário |
-| `app.py` | Interface Streamlit: login, emissão, verificação (também sem login), revogação, emissores, explorador da blockchain e rejeitadas |
-| `tests/` | Testes com pytest para operações válidas, entradas inválidas, falta de permissão, segurança e integridade da cadeia |
+| `no.py` | Nó local: login, cadastro de alunos, envio das transações ao contrato e mineração |
+| `diploma.py` | Gera o PDF do diploma |
+| `app.py` | Interface em Streamlit |
+| `tests/` | Testes com pytest |
 
-O estado do contrato (emissores e diplomas) não fica salvo em outro lugar. Toda vez que o nó inicia, ele reexecuta as transações desde o bloco gênesis, então a blockchain é a única fonte de dados.
+O nó não guarda o estado do contrato em outro arquivo. Ao iniciar, ele reexecuta todas as transações desde o bloco gênesis, então a blockchain é a única fonte dos dados.
 
-## 5. Contrato inteligente
+## Contrato inteligente
 
-Papéis:
+A Reitoria é o administrador, definido no bloco gênesis. Ela autoriza e remove emissores, mas não emite diplomas. As secretarias EST e ESA também constam no gênesis como emissoras, e cada uma só revoga o que emitiu. Alunos entram para consultar e baixar os próprios diplomas; se tentarem emitir, o contrato rejeita. A verificação é pública e não exige login.
 
-- Administrador (Reitoria): definido no bloco gênesis. Autoriza e remove emissores, e não emite diplomas.
-- Emissor (secretarias acadêmicas): emite diplomas e revoga os que emitiu. As secretarias EST e ESA aparecem no bloco gênesis (`emissores_iniciais`), então essa permissão também está na blockchain.
-- Sem permissão (Carlos e alunos cadastrados): entra e consulta. Se tentar emitir ou revogar, o contrato rejeita.
-- Público: verifica diplomas sem fazer login e sem criar transação.
+O contrato confere todas as regras antes de alterar qualquer dado. Se uma falha, a transação vai para o log de rejeitadas e nenhum bloco é criado.
 
-O contrato confere todas as regras antes de alterar qualquer dado. Se uma regra falha, a transação é rejeitada e nenhum bloco é criado.
-
-| Regra | Operação | Descrição |
+| Regra | Operação | O que o contrato exige |
 |---|---|---|
-| G1 | todas | transação com todos os campos obrigatórios |
-| G2 | todas | operação conhecida |
-| G3 | todas | remetente corresponde à chave pública |
-| G4 | todas | assinatura digital válida (ninguém alterou a transação) |
-| G5 | todas | nonce sequencial por conta, contra *replay* |
-| A1 a A5 | AUTORIZAR_EMISSOR | só o admin; endereço válido; nome com 3 a 100 caracteres; admin não pode ser emissor; emissor ainda não ativo |
-| R1 e R2 | REMOVER_EMISSOR | só o admin; emissor precisa estar ativo |
-| E1 | EMITIR_CERTIFICADO | remetente precisa ser emissor ativo |
-| E2 e E3 | EMITIR_CERTIFICADO | código no formato `A-Z0-9-` (4 a 40 caracteres) e único |
-| E4 e E5 | EMITIR_CERTIFICADO | hash SHA-256 do documento válido e ainda não registrado |
-| E6 | EMITIR_CERTIFICADO | hash SHA-256 do titular válido |
-| E7 a E9 | EMITIR_CERTIFICADO | curso com 3 a 120 caracteres; carga horária de 1 a 20000; data de conclusão válida e não futura |
-| V1 a V4 | REVOGAR_CERTIFICADO | diploma existe e está ativo; só o emissor original ou o admin; motivo com 5 a 200 caracteres |
-| N1 | nó | o nó recusa transações se a cadeia estiver corrompida |
+| G1 a G5 | todas | campos completos, operação conhecida, remetente igual à chave pública, assinatura válida e nonce em sequência (contra replay) |
+| A1 a A5 | autorizar emissor | só o admin; endereço válido; nome com 3 a 100 caracteres; o admin não pode ser emissor; o emissor ainda não pode estar ativo |
+| R1 e R2 | remover emissor | só o admin, e o emissor precisa estar ativo |
+| E1 a E9 | emitir diploma | emissor ativo; código no formato `A-Z0-9-` e inédito; hash do PDF válido e inédito; hash do titular válido; curso com 3 a 120 caracteres; carga horária de 1 a 20000; data de conclusão que não esteja no futuro |
+| V1 a V4 | revogar diploma | o diploma existe e está ativo; quem revoga é o emissor original ou o admin; motivo com 5 a 200 caracteres |
+| N1 | nó | a cadeia precisa estar íntegra para o nó aceitar transações |
 
-## 6. O que fica na blockchain
+## O que fica na blockchain
 
-| Na blockchain (público) | Fora da blockchain |
-|---|---|
-| Hash SHA-256 do PDF do diploma | O PDF (em `dados/diplomas/` e com o aluno) |
-| Hash do titular (matrícula + nome normalizado) | Nome, matrícula e CPF do aluno |
-| Código, curso, carga horária e data de conclusão | Histórico escolar e notas |
-| Instituição e endereço do emissor | Senhas e chaves privadas |
-| Status (ativo ou revogado), motivo e bloco da revogação | Log de transações rejeitadas |
-| Assinatura, nonce e horário de cada transação | |
+Na cadeia ficam o hash do PDF, o hash do titular (matrícula + nome), o código, o curso, a carga horária, a data de conclusão, a instituição que emitiu, o status do diploma e, em cada transação, a assinatura, o nonce e o horário.
 
-Quem tem o PDF, ou o nome e a matrícula, consegue conferir o diploma. Quem só olha a cadeia vê hashes.
+Ficam de fora o PDF, o nome, a matrícula e o CPF do aluno, as senhas e o log de rejeitadas. Quem tem o PDF, ou o nome e a matrícula, consegue conferir o diploma. Quem olha só a cadeia vê hashes.
 
-As chaves privadas desta demonstração ficam em `dados/carteiras.json`, cifradas com a senha de cada conta (PBKDF2 + Fernet). Numa instalação real, cada instituição guardaria a própria chave.
+## Como executar
 
-## 7. Como executar
-
-Requisito: Python 3.10 ou mais recente.
+É preciso ter Python 3.10 ou mais recente.
 
 ```bash
 pip install -r requirements.txt
-streamlit run app.py          # interface em http://localhost:8501
-python -m pytest -v           # 59 testes automatizados
-python main.py                # núcleo da blockchain no terminal, como no exemplo do professor
+streamlit run app.py      # abre em http://localhost:8501
+python -m pytest -v       # testes
+python main.py            # núcleo da blockchain no terminal
 ```
 
-No Windows, você também pode abrir o `executar.bat` com dois cliques.
+No Windows, o `executar.bat` instala as dependências e abre o app.
 
-Na primeira execução, o app cria a pasta `dados/` com a blockchain (`blockchain.json`), as carteiras, os usuários, o log de rejeições e os PDFs gerados. Para começar do zero, apague essa pasta.
+Na primeira execução, o app cria a pasta `dados/` com a blockchain e as contas de demonstração. A tela de login lista essas contas e as senhas. Para começar do zero, apague `dados/`.
 
-### Contas de demonstração
-
-| Conta | Papel | Senha |
-|---|---|---|
-| Reitoria UEA (administrador) | Administrador | `reitoria123` |
-| Secretaria Acadêmica EST/UEA | Emissor | `est123` |
-| Secretaria Acadêmica ESA/UEA | Emissor | `esa123` |
-| Carlos | Sem permissão | `carlos123` |
-
-Na tela de login dá para cadastrar novos alunos e, pelo botão "Verificar um diploma", conferir um PDF sem entrar.
-
-Se você rodou uma versão anterior do projeto, apague as pastas `dados/` e `secrets/` antes, para que as contas acima passem a valer.
-
-A pasta `exemplos/` tem diplomas de exemplo, incluindo uma versão adulterada.
+A pasta `exemplos/` tem diplomas em PDF para testar a verificação, incluindo um adulterado.
