@@ -42,6 +42,6 @@ def gerar_diploma_pdf(nome, curso, carga_horaria, data_conclusao, codigo, instit
     c.setFont("Helvetica", 10); c.setFillColor(colors.HexColor("#555555"))
     c.drawString(60, 70, f"Código de verificação: {codigo}")
     c.drawString(60, 56, "Autenticidade verificável na blockchain CertChain UEA (hash SHA-256 deste arquivo).")
-    c.drawRightString(w - 60, 70, "Documento de demonstração — sem validade real")
+    c.drawRightString(w - 60, 70, "Documento de demonstração, sem validade real")
     c.save()
     return buffer.getvalue()

@@ -90,7 +90,7 @@ class ContratoCertificados:
         aplicar()
         self.nonces[tx["remetente"]] = tx["nonce"]
 
-    # ------------------------------------------------ regras gerais (G1–G5)
+    # ------------------------------------------------ regras gerais (G1 a G5)
     def _validar_transacao(self, tx):
         if not isinstance(tx, dict) or any(c not in tx for c in CAMPOS) or not isinstance(tx.get("payload"), dict):
             raise ErroContrato("G1", "transação mal formada (campos obrigatórios ausentes)")
@@ -147,7 +147,7 @@ class ContratoCertificados:
             raise ErroContrato("E1", "permissão negada: remetente não é um emissor autorizado")
         codigo = p.get("codigo")
         if not isinstance(codigo, str) or not RE_CODIGO.match(codigo):
-            raise ErroContrato("E2", "código inválido (use 4–40 caracteres: A-Z, 0-9 e hífen)")
+            raise ErroContrato("E2", "código inválido (use de 4 a 40 caracteres: A-Z, 0-9 e hífen)")
         if codigo in self.certificados:
             raise ErroContrato("E3", f"já existe certificado com o código {codigo}")
         doc = p.get("documento_hash")

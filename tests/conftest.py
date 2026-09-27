@@ -9,7 +9,7 @@ def no(tmp_path):
     """Nó novo, com dados em pasta temporária e dificuldade baixa para os testes rodarem rápido.
 
     Atalho de teste: `no.enviar(endereco, tipo, payload)` autentica a conta com a senha
-    de demonstração e assina — no app real, a carteira autenticada vem do login.
+    de demonstração e assina. No app real, a carteira autenticada vem do login.
     """
     n = No(str(tmp_path / "dados"), dificuldade=2)
     senhas = {c.endereco: senha for c, (_, senha) in zip(n.carteiras, CONTAS_PADRAO)}

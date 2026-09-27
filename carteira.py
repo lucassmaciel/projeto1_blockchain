@@ -2,13 +2,13 @@
 # Identidade de cada participante da rede: um par de chaves Ed25519, protegida por senha.
 #  - a chave PRIVADA assina as transações e fica CIFRADA em disco (Fernet + PBKDF2);
 #    ela só existe em texto puro na memória depois que a senha certa é informada
-#    (ver `desbloquear`) — isso é o que implementa o "login" de cada usuário.
+#    (ver `desbloquear`). É isso que implementa o "login" de cada usuário.
 #  - a chave PÚBLICA permite a qualquer um conferir a assinatura;
 #  - o ENDEREÇO (0x + 40 hex) é derivado da chave pública, como no Ethereum.
 #
 # Obs.: nesta demo local, "desbloquear" uma carteira é o equivalente a logar como
 # aquela conta. Em produção, cada instituição escolheria e guardaria sua própria
-# senha — aqui usamos senhas de demonstração (ver README, seção "Credenciais de
+# senha; aqui usamos senhas de demonstração (ver README, seção "Credenciais de
 # demonstração") só para o professor conseguir testar cada papel.
 import base64
 import hashlib
@@ -46,16 +46,16 @@ def _chave_fernet(senha, sal):
 class Carteira:
     """
     Uma carteira pode existir em dois estados:
-      - BLOQUEADA:    criada via `from_dict` — tem nome/endereço/chave pública
+      - BLOQUEADA:    criada via `from_dict`. Tem nome/endereço/chave pública
                       (informação pública, ok para listar na interface), mas
                       NÃO consegue assinar nada (`self._privada is None`).
       - DESBLOQUEADA: criada via `criar()`, ou depois de um `desbloquear()` com
-                      a senha certa — tem a chave privada em memória e assina.
+                      a senha certa. Tem a chave privada em memória e assina.
 
     IMPORTANTE (concorrência no Streamlit): o nó (`No`) é compartilhado entre
     todas as sessões/usuários do servidor. Por isso `no.carteiras` guarda só
     carteiras BLOQUEADAS. Cada login deve chamar `No.autenticar(...)`, que
-    devolve uma CÓPIA nova e isolada — nunca desbloqueie diretamente uma
+    devolve uma CÓPIA nova e isolada. Nunca desbloqueie diretamente uma
     carteira que veio de `no.carteiras`, ou um usuário destrava a chave de
     outro.
     """
@@ -108,7 +108,7 @@ class Carteira:
 
     # -------------------------------------------------------- (de)serialização
     def to_dict(self):
-        """Nunca inclui a chave privada em texto puro — só a versão cifrada."""
+        """Nunca inclui a chave privada em texto puro, só a versão cifrada."""
         return {
             "nome": self.nome,
             "endereco": self.endereco,
@@ -119,7 +119,7 @@ class Carteira:
 
     @staticmethod
     def from_dict(d):
-        """Sempre devolve uma carteira BLOQUEADA — quem precisar assinar deve
+        """Sempre devolve uma carteira BLOQUEADA. Quem precisar assinar deve
         chamar `.desbloquear(senha)` (normalmente via `No.autenticar`).
 
         Também aceita o formato legado, que armazenava apenas a chave privada em texto
@@ -147,6 +147,6 @@ def salvar_carteiras(carteiras, caminho):
 def carregar_carteiras_bruto(caminho):
     """Lê os dicionários crus do disco (sem instanciar `Carteira`). O nó usa isso
     para conseguir gerar, a cada tentativa de login, uma cópia nova e isolada da
-    carteira — em vez de desbloquear um objeto compartilhado entre sessões."""
+    carteira, em vez de desbloquear um objeto compartilhado entre sessões."""
     with open(caminho, encoding="utf-8") as f:
         return json.load(f)

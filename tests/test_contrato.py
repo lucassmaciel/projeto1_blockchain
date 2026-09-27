@@ -20,7 +20,7 @@ class TestOperacoesValidas:
         assert no.contrato.papel(contas["est"]) == "EMISSOR"
 
     def test_admin_autoriza_emissor(self, no, contas):
-        r = no.enviar(contas["admin"], "AUTORIZAR_EMISSOR", {"endereco": contas["aluno"], "nome": "UEA — Pós-graduação"})
+        r = no.enviar(contas["admin"], "AUTORIZAR_EMISSOR", {"endereco": contas["aluno"], "nome": "UEA, Pós-graduação"})
         assert r["ok"] and r["bloco"]["index"] == 1
         assert no.contrato.papel(contas["aluno"]) == "EMISSOR"
 
@@ -135,7 +135,7 @@ class TestEntradasInvalidas:
         assert rejeitada(no.enviar(contas["admin"], "AUTORIZAR_EMISSOR", {"endereco": contas["admin"], "nome": "Reitoria"}), "A4")
 
     def test_autorizar_emissor_ja_ativo(self, no, contas):
-        r = no.enviar(contas["admin"], "AUTORIZAR_EMISSOR", {"endereco": contas["est"], "nome": "UEA — EST"})
+        r = no.enviar(contas["admin"], "AUTORIZAR_EMISSOR", {"endereco": contas["est"], "nome": "UEA, EST"})
         assert rejeitada(r, "A5")
 
     def test_operacao_desconhecida(self, no, contas):

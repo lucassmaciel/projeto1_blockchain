@@ -7,10 +7,10 @@
 #     -> aceita: vira um bloco, é minerado (PoW), estado atualizado, salvo em disco
 #
 # IMPORTANTE sobre concorrência: em app.py, este `No` é criado com
-# @st.cache_resource — ou seja, é UM ÚNICO objeto compartilhado por TODAS as
+# @st.cache_resource, ou seja, é UM ÚNICO objeto compartilhado por TODAS as
 # sessões/usuários que acessarem o servidor Streamlit ao mesmo tempo. Por isso:
 #   - `self.carteiras` guarda só carteiras BLOQUEADAS (nome/endereço/chave
-#     pública — informação pública, segura de expor);
+#     pública, que é informação pública e segura de expor);
 #   - `autenticar()` nunca desbloqueia esses objetos compartilhados: ele lê os
 #     dados brutos e devolve uma CÓPIA NOVA, que a interface guarda no
 #     `st.session_state` daquela sessão específica.
@@ -37,7 +37,7 @@ CONTAS_PADRAO = [
 
 def _escrever_credenciais_referencia():
     """Escreve secrets/usuarios_demo.json como REFERÊNCIA a partir de CONTAS_PADRAO.
-    Este arquivo nunca é lido para obter senha — a fonte da verdade é CONTAS_PADRAO."""
+    Este arquivo nunca é lido para obter senha. A fonte da verdade é CONTAS_PADRAO."""
     ARQUIVO_CREDENCIAIS.parent.mkdir(parents=True, exist_ok=True)
     with open(ARQUIVO_CREDENCIAIS, "w", encoding="utf-8") as f:
         json.dump({"usuarios": [{"nome": nome, "senha": senha} for nome, senha in CONTAS_PADRAO]},
@@ -166,7 +166,7 @@ class No:
         self.contrato = self.reconstruir_estado(self.cadeia)
 
     def carteira(self, endereco):
-        """Carteira BLOQUEADA (só dados públicos) — usada pela interface para
+        """Carteira BLOQUEADA (só dados públicos), usada pela interface para
         mostrar nome/papel. Nunca use o retorno desta função para assinar."""
         return next((c for c in self.carteiras if c.endereco == endereco), None)
 
