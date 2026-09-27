@@ -1,5 +1,5 @@
 # app.py
-# Interface Streamlit do CertChain UEA — registrar, consultar e visualizar a blockchain.
+# Interface Streamlit do CertChain UEA: registrar, consultar e visualizar a blockchain.
 # Executar: streamlit run app.py
 #
 # Princípio da interface: TODAS as operações ficam visíveis para todos os papéis.
@@ -20,7 +20,7 @@ from no import CONTAS_PADRAO, No
 PASTA_DADOS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dados")
 PASTA_DIPLOMAS = os.path.join(PASTA_DADOS, "diplomas")  # PDFs ficam FORA da blockchain
 
-st.set_page_config(page_title="CertChain UEA", page_icon="🎓", layout="wide")
+st.set_page_config(page_title="CertChain UEA", layout="wide")
 
 
 @st.cache_resource
@@ -38,12 +38,12 @@ st.session_state.setdefault("aviso", None)
 
 COR_PAPEL = {"ADMINISTRADOR": "blue", "EMISSOR": "green"}
 PERMISSOES = {
-    "ADMINISTRADOR": "✅ Autorizar e remover emissores  \n✅ Revogar qualquer diploma  \n"
-                     "❌ Emitir diplomas (separação de funções)",
-    "EMISSOR": "✅ Emitir diplomas  \n✅ Revogar os diplomas que emitiu  \n❌ Gerenciar emissores",
+    "ADMINISTRADOR": "- Autoriza e remove emissores\n- Revoga qualquer diploma\n"
+                     "- Não emite diplomas (separação de funções)",
+    "EMISSOR": "- Emite diplomas\n- Revoga os diplomas que emitiu\n- Não gerencia emissores",
 }
-PERMISSOES_PADRAO = ("✅ Verificar e baixar os próprios diplomas  \n"
-                     "❌ Emitir, revogar ou gerenciar emissores — o contrato rejeita")
+PERMISSOES_PADRAO = ("- Verifica e baixa os próprios diplomas\n"
+                     "- Se tentar emitir, revogar ou mexer em emissores, o contrato rejeita")
 
 
 # ------------------------------------------------------------------ utilidades
@@ -60,7 +60,7 @@ def sair():
 
 def nome_conta(endereco):
     c = no.carteira(endereco)
-    return c.nome if c else (endereco[:10] + "…" if endereco else "—")
+    return c.nome if c else (endereco[:10] + "..." if endereco else "-")
 
 
 def quando(ts):
@@ -89,17 +89,17 @@ def metricas_cadeia():
     a.metric("Blocos na cadeia", len(no.cadeia.blocks))
     b.metric("Diplomas registrados", len(no.contrato.certificados))
     c.metric("Prova de trabalho", f"{no.cadeia.difficulty} zeros")
-    d.metric("Integridade", "Íntegra ✅" if valida else "Violada ❌", help=None if valida else f"Bloco #{idx} adulterado")
+    d.metric("Integridade", "Íntegra" if valida else "Violada", help=None if valida else f"Bloco #{idx} adulterado")
 
 
 def mostrar_resultado(r):
     if r["ok"]:
         b = r["bloco"]
-        st.success(f"✅ Transação aceita pelo contrato e minerada no **bloco #{b['index']}** "
+        st.success(f"Transação aceita pelo contrato e minerada no **bloco #{b['index']}** "
                    f"(nonce {b['nonce']:,}, {r['tempo_mineracao']:.2f}s)".replace(",", "."))
         st.code(f"hash:          {b['hash']}\nhash anterior: {b['previous_hash']}", language=None)
     else:
-        st.error(f"❌ Transação **rejeitada** pelo contrato — regra **{r['regra']}**: {r['erro']}\n\n"
+        st.error(f"Transação **rejeitada** pelo contrato. Regra **{r['regra']}**: {r['erro']}\n\n"
                  "Nenhum bloco foi criado.")
 
 
@@ -134,20 +134,20 @@ def botao_diploma(codigo, chave, primario=False):
     caminho = caminho_diploma(codigo)
     if os.path.exists(caminho):
         with open(caminho, "rb") as f:
-            st.download_button("⬇️ Baixar diploma (PDF)", f.read(), file_name=f"diploma_{codigo}.pdf",
+            st.download_button("Baixar diploma (PDF)", f.read(), file_name=f"diploma_{codigo}.pdf",
                                mime="application/pdf", key=f"dl_{chave}",
                                type="primary" if primario else "secondary")
 
 
 def cartao_certificado(c, chave):
     if c is None:
-        st.error("❌ **Não encontrado.** Documento não registrado na blockchain ou adulterado.")
+        st.error("**Não encontrado.** Este documento não está registrado na blockchain ou foi alterado.")
         return
     if c["status"] == ATIVO:
-        st.success(f"✅ Diploma **AUTÊNTICO** e **ATIVO** — {c['codigo']}")
+        st.success(f"Diploma **autêntico** e **ativo** ({c['codigo']})")
     else:
         rv = c["revogacao"]
-        st.error(f"🚫 Diploma **REVOGADO** no bloco #{rv['bloco']} — motivo: {rv['motivo']}")
+        st.error(f"Diploma **revogado** no bloco #{rv['bloco']}. Motivo: {rv['motivo']}")
     st.markdown(f"**Curso:** {c['curso']}  \n"
                 f"**Carga horária:** {c['carga_horaria']} h  \n"
                 f"**Conclusão:** {date.fromisoformat(c['data_conclusao']).strftime('%d/%m/%Y')}  \n"
@@ -169,7 +169,7 @@ def secao_verificacao():
     col_pdf, col_cod = st.columns(2, gap="large")
     with col_pdf:
         with st.container(border=True):
-            st.markdown("##### 📄 Pelo arquivo PDF")
+            st.markdown("##### Pelo arquivo PDF")
             pdf_v = st.file_uploader("Arraste o diploma recebido", type=["pdf"], key="pdf_verificar")
             if pdf_v:
                 h = hash_arquivo(pdf_v.getvalue())
@@ -177,7 +177,7 @@ def secao_verificacao():
                 cartao_certificado(no.contrato.verificar_documento(h), "ver_pdf")
     with col_cod:
         with st.container(border=True):
-            st.markdown("##### 🔢 Pelo código")
+            st.markdown("##### Pelo código")
             cod_v = st.text_input("Código impresso no diploma", placeholder="UEA-2026-0001")
             if cod_v:
                 cert_v = no.contrato.consultar(cod_v.strip().upper())
@@ -188,11 +188,11 @@ def secao_verificacao():
                         m = st.text_input("Matrícula", key="tit_mat")
                         if n and m:
                             if hash_titular(n, m) == cert_v["titular_hash"]:
-                                st.success("Titular confere ✅")
+                                st.success("O titular confere.")
                             else:
-                                st.error("Titular NÃO confere ❌")
+                                st.error("O titular não confere.")
 
-    st.markdown("##### Estado do contrato — diplomas registrados")
+    st.markdown("##### Diplomas registrados no contrato")
     if no.contrato.certificados:
         st.dataframe(pd.DataFrame([{
             "Código": c["codigo"], "Status": c["status"], "Curso": c["curso"],
@@ -205,8 +205,8 @@ def secao_verificacao():
 
 # ------------------------------------------------------------------ telas sem login
 def tela_login():
-    st.title("🎓 CertChain UEA")
-    st.caption("Diplomas da UEA registrados em uma blockchain local — autenticidade verificável por qualquer pessoa.")
+    st.title("CertChain UEA")
+    st.caption("Registro de diplomas da UEA em uma blockchain local. Qualquer pessoa pode conferir se um diploma é autêntico.")
     if st.session_state.get("aviso"):
         st.success(st.session_state.pop("aviso"))
     metricas_cadeia()
@@ -215,7 +215,7 @@ def tela_login():
     esquerda, direita = st.columns(2, gap="large")
     with esquerda:
         with st.container(border=True):
-            st.subheader("🔐 Entrar")
+            st.subheader("Entrar")
             usuarios = no.listar_usuarios()
             mapa = {u["nome"]: u for u in usuarios}
             with st.form("login"):
@@ -229,7 +229,7 @@ def tela_login():
                         st.session_state["resultado"] = None
                         st.rerun()
                     st.error("Senha incorreta.")
-            with st.expander("👤 Sou aluno e ainda não tenho conta"):
+            with st.expander("Sou aluno e ainda não tenho conta"):
                 with st.form("cadastro_aluno", clear_on_submit=True):
                     nome_novo = st.text_input("Nome completo")
                     matricula_nova = st.text_input("Matrícula")
@@ -245,12 +245,12 @@ def tela_login():
 
     with direita:
         with st.container(border=True):
-            st.subheader("🔎 Recebeu um diploma?")
-            st.write("Confira se ele é autêntico **sem precisar de conta**: envie o PDF ou digite o código impresso.")
+            st.subheader("Recebeu um diploma?")
+            st.write("Você pode conferir sem criar conta: envie o PDF ou digite o código impresso nele.")
             if st.button("Verificar um diploma", use_container_width=True):
                 st.session_state["tela"] = "verificar"
                 st.rerun()
-        with st.expander("🔑 Contas de demonstração"):
+        with st.expander("Contas de demonstração"):
             st.dataframe(pd.DataFrame([{"Conta": nome, "Papel": no.contrato.papel(c.endereco), "Senha": senha}
                                        for c, (nome, senha) in zip(no.carteiras, CONTAS_PADRAO)]),
                          hide_index=True, use_container_width=True)
@@ -258,7 +258,7 @@ def tela_login():
 
 
 def tela_verificacao_publica():
-    st.title("🎓 CertChain UEA — Verificação pública")
+    st.title("CertChain UEA: verificação pública")
     if st.button("← Voltar"):
         st.session_state["tela"] = "login"
         st.rerun()
@@ -274,8 +274,8 @@ def aba_meus_diplomas(conta, papel):
         return
     titular = hash_titular(usuario["nome"], usuario["matricula"])
     meus = [c for c in no.contrato.certificados.values() if c["titular_hash"] == titular]
-    st.caption("Localizados comparando o hash de nome + matrícula com o registrado na blockchain — "
-               "seus dados pessoais não ficam na cadeia.")
+    st.caption("A busca compara o hash do seu nome + matrícula com o que está registrado na blockchain. "
+               "Seu nome e sua matrícula não ficam na cadeia.")
     if not meus:
         st.info("Nenhum diploma registrado em seu nome ainda.")
     for c in meus:
@@ -288,10 +288,10 @@ def aba_emitir(conta, papel):
     st.caption(f"A transação será assinada por **{nome_conta(conta)}** ({papel}). "
                "O PDF do diploma é gerado a partir dos dados; só o hash dele vai para a blockchain.")
     if papel != "EMISSOR":
-        st.warning("Esta conta não é emissora: o contrato inteligente vai **rejeitar** a emissão (regra E1).")
+        st.warning("Esta conta não é emissora: o contrato inteligente vai rejeitar a emissão (regra E1).")
 
     alunos = no.listar_alunos()
-    opcoes = [f"{a['nome']} — {a['matricula']}" for a in alunos] + ["✍️ Outro aluno (digitar)"]
+    opcoes = [f"{a['nome']} ({a['matricula']})" for a in alunos] + ["Outro aluno (digitar)"]
     with st.container(border=True):
         c1, c2 = st.columns(2)
         escolha = c1.selectbox("Aluno", opcoes, key="em_aluno")
@@ -341,7 +341,7 @@ def aba_revogar(conta, papel):
     st.caption(f"A transação será assinada por **{nome_conta(conta)}** ({papel}). "
                "Só o emissor original ou o administrador podem revogar.")
     if papel not in ("EMISSOR", "ADMINISTRADOR"):
-        st.warning("Esta conta não pode revogar: o contrato vai **rejeitar** (regra V3).")
+        st.warning("Esta conta não pode revogar: o contrato vai rejeitar (regra V3).")
     certs = no.contrato.certificados
     if not certs:
         st.info("Nenhum diploma emitido ainda.")
@@ -360,10 +360,10 @@ def aba_emissores(conta, papel):
     st.caption(f"Administrador (definido no bloco gênesis): **{nome_conta(no.contrato.admin)}**. "
                "Emissores com bloco 0 foram definidos no próprio gênesis.")
     if papel != "ADMINISTRADOR":
-        st.warning("Só o administrador gerencia emissores: o contrato vai **rejeitar** (regras A1/R1).")
+        st.warning("Só o administrador gerencia emissores: o contrato vai rejeitar (regras A1/R1).")
     st.dataframe(pd.DataFrame([{
         "Instituição": e["nome"], "Conta": nome_conta(e["endereco"]), "Endereço": e["endereco"],
-        "Ativo": "✅" if e["ativo"] else "❌", "Autorizado no bloco": e["autorizado_no_bloco"],
+        "Ativo": "Sim" if e["ativo"] else "Não", "Autorizado no bloco": e["autorizado_no_bloco"],
         "Removido no bloco": e["removido_no_bloco"]} for e in no.contrato.emissores.values()]),
         hide_index=True, use_container_width=True)
     opcoes = [c.endereco for c in no.carteiras]
@@ -371,7 +371,7 @@ def aba_emissores(conta, papel):
     with c1.form("autorizar"):
         st.markdown("##### Autorizar emissor")
         alvo = st.selectbox("Conta", opcoes, format_func=nome_conta, key="alvo_aut")
-        inst = st.text_input("Nome da instituição/setor", value="UEA — Escola Superior de Tecnologia")
+        inst = st.text_input("Nome da instituição/setor", value="UEA, Escola Superior de Tecnologia")
         if st.form_submit_button("Autorizar", type="primary"):
             enviar("emissores", AUTORIZAR_EMISSOR, {"endereco": alvo, "nome": inst})
     with c2.form("remover"):
@@ -386,12 +386,12 @@ def aba_blockchain(conta, papel):
     st.subheader("Explorador da blockchain")
     valida, idx_inv, motivo_inv = no.cadeia.validate()
     if valida:
-        st.success(f"✅ Cadeia íntegra: {len(no.cadeia.blocks)} blocos, todos os hashes e elos conferem.")
+        st.success(f"Cadeia íntegra: {len(no.cadeia.blocks)} blocos, e todos os hashes e elos conferem.")
     else:
-        st.error(f"❌ Cadeia CORROMPIDA no bloco #{idx_inv}: {motivo_inv}")
+        st.error(f"Cadeia corrompida no bloco #{idx_inv}: {motivo_inv}")
 
-    with st.expander("🧪 Demonstração: simular adulteração de um bloco"):
-        st.caption("Altera um bloco só na memória, para mostrar que a validação detecta. "
+    with st.expander("Demonstração: simular adulteração de um bloco"):
+        st.caption("O botão altera um bloco só na memória, e a validação da cadeia acusa a mudança. "
                    "Depois clique em Restaurar para recarregar a cadeia do disco.")
         blocos_tx = [b.index for b in no.cadeia.blocks[1:]]
         if blocos_tx:
@@ -416,7 +416,7 @@ def aba_blockchain(conta, papel):
             if b.index > 0:
                 titulo += f" · assinado por {nome_conta(b.data.get('remetente'))}"
             if not valida and b.index == idx_inv:
-                titulo += "  :red[**⚠ inválido**]"
+                titulo += "  :red[**inválido**]"
             st.markdown(titulo)
             z = no.cadeia.difficulty
             st.markdown(f"hash: `{b.hash[:z]}`**`{b.hash[z:]}`**  \n"
@@ -424,16 +424,13 @@ def aba_blockchain(conta, papel):
                         f"nonce: `{b.nonce}` · minerado em {quando(b.timestamp)}")
             with st.expander("Dados do bloco"):
                 st.json(b.data.get("payload", b.data))
-        if b.index > 0:
-            st.markdown("<div style='text-align:center;font-size:20px;margin:-8px 0'>⬆</div>",
-                        unsafe_allow_html=True)
     st.download_button("Baixar blockchain (JSON)", json.dumps(no.cadeia.to_dict(), ensure_ascii=False, indent=2),
                        file_name="blockchain.json", mime="application/json")
 
 
 def aba_rejeitadas(conta, papel):
     st.subheader("Transações rejeitadas pelo contrato")
-    st.caption("Ficam só neste log do nó — nunca entram na blockchain.")
+    st.caption("Essas transações ficam só no log do nó e nunca entram na blockchain.")
     if no.rejeitadas:
         st.dataframe(pd.DataFrame([{
             "Quando": quando(r["timestamp"]), "Conta": nome_conta(r["remetente"]),
@@ -444,13 +441,13 @@ def aba_rejeitadas(conta, papel):
 
 
 ABAS = {
-    "meus": ("🎓 Meus diplomas", aba_meus_diplomas),
-    "emitir": ("📝 Emitir", aba_emitir),
-    "verificar": ("🔎 Verificar", aba_verificar),
-    "revogar": ("🚫 Revogar", aba_revogar),
-    "emissores": ("🏛️ Emissores", aba_emissores),
-    "cadeia": ("⛓️ Blockchain", aba_blockchain),
-    "rejeitadas": ("⚠️ Rejeitadas", aba_rejeitadas),
+    "meus": ("Meus diplomas", aba_meus_diplomas),
+    "emitir": ("Emitir", aba_emitir),
+    "verificar": ("Verificar", aba_verificar),
+    "revogar": ("Revogar", aba_revogar),
+    "emissores": ("Emissores", aba_emissores),
+    "cadeia": ("Blockchain", aba_blockchain),
+    "rejeitadas": ("Rejeitadas", aba_rejeitadas),
 }
 # A primeira aba é a tarefa principal de cada papel; as demais continuam disponíveis.
 ORDEM_POR_PAPEL = {
@@ -466,7 +463,7 @@ def painel():
     papel = no.contrato.papel(conta)
 
     with st.sidebar:
-        st.title("🎓 CertChain UEA")
+        st.title("CertChain UEA")
         st.markdown(f"**{carteira.nome}**  \n:{COR_PAPEL.get(papel, 'red')}[**{papel}**]")
         st.caption("Endereço na blockchain (público)")
         st.code(conta, language=None)
