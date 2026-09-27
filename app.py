@@ -89,7 +89,7 @@ def metricas_cadeia():
     a.metric("Blocos na cadeia", len(no.cadeia.blocks))
     b.metric("Diplomas registrados", len(no.contrato.certificados))
     c.metric("Prova de trabalho", f"{no.cadeia.difficulty} zeros")
-    d.metric("Integridade", "Íntegra ✅" if valida else f"Corrompida ❌ #{idx}")
+    d.metric("Integridade", "Íntegra ✅" if valida else "Violada ❌", help=None if valida else f"Bloco #{idx} adulterado")
 
 
 def mostrar_resultado(r):
