@@ -31,8 +31,19 @@ CONTAS_PADRAO = [
     ("Reitoria UEA (administrador)", "reitoria123"),
     ("Secretaria Acadêmica EST/UEA", "est123"),
     ("Secretaria Acadêmica ESA/UEA", "esa123"),
-    ("Carlos", "carlos123"),
+    ("Caio", "caio123"),
 ]
+
+# Alunos que já vêm cadastrados na demonstração. Caio também é a 4ª conta padrão
+# (sem permissão no contrato); Lucas ganha a carteira quando o nó sincroniza os alunos.
+ALUNOS_PADRAO = [
+    {"nome": "Caio", "matricula": "2026001", "senha": "caio123", "tipo": "ALUNO"},
+    {"nome": "Lucas", "matricula": "2026002", "senha": "lucas123", "tipo": "ALUNO"},
+]
+
+
+def alunos_padrao():
+    return [dict(a) for a in ALUNOS_PADRAO]
 
 
 def _escrever_credenciais_referencia():
@@ -172,12 +183,7 @@ class No:
 
     def _carregar_usuarios(self):
         if not os.path.exists(self.arq_usuarios):
-            usuarios = [{
-                "nome": "Carlos",
-                "matricula": "2026001",
-                "senha": "carlos123",
-                "tipo": "ALUNO",
-            }]
+            usuarios = alunos_padrao()
             with open(self.arq_usuarios, "w", encoding="utf-8") as f:
                 json.dump(usuarios, f, ensure_ascii=False, indent=2)
             return usuarios
@@ -188,22 +194,12 @@ class No:
             if not isinstance(usuarios, list):
                 raise ValueError("arquivo de usuários inválido")
             if not usuarios:
-                usuarios = [{
-                    "nome": "Carlos",
-                    "matricula": "2026001",
-                    "senha": "carlos123",
-                    "tipo": "ALUNO",
-                }]
+                usuarios = alunos_padrao()
                 with open(self.arq_usuarios, "w", encoding="utf-8") as f:
                     json.dump(usuarios, f, ensure_ascii=False, indent=2)
             return usuarios
         except (json.JSONDecodeError, OSError, TypeError, ValueError):
-            usuarios = [{
-                "nome": "Carlos",
-                "matricula": "2026001",
-                "senha": "carlos123",
-                "tipo": "ALUNO",
-            }]
+            usuarios = alunos_padrao()
             with open(self.arq_usuarios, "w", encoding="utf-8") as f:
                 json.dump(usuarios, f, ensure_ascii=False, indent=2)
             return usuarios
@@ -235,6 +231,14 @@ class No:
         salvar_carteiras([Carteira.from_dict(d) for d in self._dados_carteiras], self.arq_carteiras)
         return novo
 
+    def papel_exibicao(self, endereco):
+        """Papel mostrado na interface: contas de aluno aparecem como ALUNO
+        (no contrato elas continuam sem permissão para emitir ou revogar)."""
+        papel = self.contrato.papel(endereco)
+        eh_aluno = any(u.get("endereco") == endereco and str(u.get("tipo", "ALUNO")).upper() == "ALUNO"
+                       for u in self.usuarios)
+        return "ALUNO" if papel == "SEM PERMISSÃO" and eh_aluno else papel
+
     def listar_alunos(self):
         return [{
             "nome": u.get("nome"),
@@ -250,7 +254,7 @@ class No:
         for usuario in self.usuarios:
             nome = usuario.get("nome")
             if nome in senha_por_nome:
-                continue  # contas padrão (ex.: Carlos) são listadas abaixo, com o papel do contrato
+                continue  # contas padrão (ex.: Caio) são listadas abaixo
             if nome and str(usuario.get("tipo", "ALUNO")).upper() == "ALUNO":
                 endereco = usuario.get("endereco")
                 if endereco:
@@ -266,7 +270,7 @@ class No:
             carteira = Carteira.from_dict(dados)
             if carteira.endereco in vistos:
                 continue
-            papel = self.contrato.papel(carteira.endereco) if hasattr(self, "contrato") else "SEM PERMISSÃO"
+            papel = self.papel_exibicao(carteira.endereco) if hasattr(self, "contrato") else "SEM PERMISSÃO"
             usuarios.append({
                 "nome": carteira.nome,
                 "endereco": carteira.endereco,

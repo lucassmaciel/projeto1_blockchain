@@ -14,7 +14,7 @@ def test_listar_usuarios_do_sistema_e_autenticar(tmp_path):
     assert len(usuarios) >= 4
 
     papels = {u["papel"] for u in usuarios}
-    assert {"ADMINISTRADOR", "EMISSOR", "SEM PERMISSÃO"}.issubset(papels)
+    assert {"ADMINISTRADOR", "EMISSOR", "ALUNO"}.issubset(papels)
 
     admin = next(u for u in usuarios if u["papel"] == "ADMINISTRADOR")
     carteira = no_obj.autenticar(admin["endereco"], admin["senha"])
@@ -52,7 +52,7 @@ def test_recria_carteiras_quando_senha_foi_alterada_e_arquivo_stale_persistiu(tm
         ("Reitoria UEA (administrador)", "reitoria123"),
         ("Secretaria Acadêmica EST/UEA", "est123"),
         ("Secretaria Acadêmica ESA/UEA", "esa123"),
-        ("Carlos", "carlos123"),
+        ("Caio", "caio123"),
     ]
     salvar_carteiras([Carteira.criar(nome, senha) for nome, senha in contas_antigas], str(pasta / "carteiras.json"))
 
@@ -60,7 +60,7 @@ def test_recria_carteiras_quando_senha_foi_alterada_e_arquivo_stale_persistiu(tm
         ("Reitoria UEA (administrador)", "nova-reitoria-2026"),
         ("Secretaria Acadêmica EST/UEA", "nova-est-2026"),
         ("Secretaria Acadêmica ESA/UEA", "nova-esa-2026"),
-        ("Carlos", "nova-carlos-2026"),
+        ("Caio", "nova-caio-2026"),
     ]
     monkeypatch.setattr(no, "CONTAS_PADRAO", senhas_novas)
 
@@ -99,4 +99,14 @@ def test_contas_padrao_usam_senhas_fixas():
     assert senhas["Reitoria UEA (administrador)"] == "reitoria123"
     assert senhas["Secretaria Acadêmica EST/UEA"] == "est123"
     assert senhas["Secretaria Acadêmica ESA/UEA"] == "esa123"
-    assert senhas["Carlos"] == "carlos123"
+    assert senhas["Caio"] == "caio123"
+
+
+def test_caio_e_lucas_sao_alunos_padrao(tmp_path):
+    no_obj = No(str(tmp_path / "demo"), dificuldade=1)
+    usuarios = {u["nome"]: u for u in no_obj.listar_usuarios()}
+    assert "Carlos" not in usuarios
+    for nome, senha in [("Caio", "caio123"), ("Lucas", "lucas123")]:
+        assert usuarios[nome]["papel"] == "ALUNO"
+        assert no_obj.autenticar(usuarios[nome]["endereco"], senha) is not None
+        assert no_obj.contrato.papel(usuarios[nome]["endereco"]) == "SEM PERMISSÃO"

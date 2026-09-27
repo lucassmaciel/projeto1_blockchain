@@ -21,7 +21,7 @@ def no(tmp_path):
 
 @pytest.fixture
 def contas(no):
-    """Reitoria (admin), secretarias EST e ESA (emissores no gênesis) e Carlos (sem permissão)."""
+    """Reitoria (admin), secretarias EST e ESA (emissores no gênesis) e Caio (aluno, sem permissão no contrato)."""
     admin, est, esa, aluno = (c.endereco for c in no.carteiras[:4])
     return {"admin": admin, "est": est, "esa": esa, "aluno": aluno}
 

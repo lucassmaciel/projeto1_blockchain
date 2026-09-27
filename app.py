@@ -15,7 +15,7 @@ import streamlit as st
 from contrato import (ATIVO, AUTORIZAR_EMISSOR, EMITIR_CERTIFICADO, REMOVER_EMISSOR,
                       REVOGAR_CERTIFICADO, hash_arquivo, hash_titular)
 from diploma import gerar_diploma_pdf
-from no import CONTAS_PADRAO, No
+from no import ALUNOS_PADRAO, CONTAS_PADRAO, No
 
 PASTA_DADOS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dados")
 PASTA_DIPLOMAS = os.path.join(PASTA_DADOS, "diplomas")  # PDFs ficam FORA da blockchain
@@ -36,7 +36,7 @@ st.session_state.setdefault("resultado", None)
 st.session_state.setdefault("tela", "login")  # "login" ou "verificar" (sem login)
 st.session_state.setdefault("aviso", None)
 
-COR_PAPEL = {"ADMINISTRADOR": "blue", "EMISSOR": "green"}
+COR_PAPEL = {"ADMINISTRADOR": "blue", "EMISSOR": "green", "ALUNO": "violet"}
 PERMISSOES = {
     "ADMINISTRADOR": "- Autoriza e remove emissores\n- Revoga qualquer diploma\n"
                      "- Não emite diplomas (separação de funções)",
@@ -251,8 +251,9 @@ def tela_login():
                 st.session_state["tela"] = "verificar"
                 st.rerun()
         with st.expander("Contas de demonstração"):
-            st.dataframe(pd.DataFrame([{"Conta": nome, "Papel": no.contrato.papel(c.endereco), "Senha": senha}
-                                       for c, (nome, senha) in zip(no.carteiras, CONTAS_PADRAO)]),
+            senhas_demo = dict(CONTAS_PADRAO) | {a["nome"]: a["senha"] for a in ALUNOS_PADRAO}
+            st.dataframe(pd.DataFrame([{"Conta": u["nome"], "Papel": u["papel"], "Senha": senhas_demo[u["nome"]]}
+                                       for u in no.listar_usuarios() if u["nome"] in senhas_demo]),
                          hide_index=True, use_container_width=True)
             st.caption("Senhas fixas apenas para a apresentação. Alunos cadastrados usam a senha que escolheram.")
 
@@ -464,7 +465,8 @@ def painel():
 
     with st.sidebar:
         st.title("CertChain UEA")
-        st.markdown(f"**{carteira.nome}**  \n:{COR_PAPEL.get(papel, 'red')}[**{papel}**]")
+        papel_tela = no.papel_exibicao(conta)
+        st.markdown(f"**{carteira.nome}**  \n:{COR_PAPEL.get(papel_tela, 'red')}[**{papel_tela}**]")
         st.caption("Endereço na blockchain (público)")
         st.code(conta, language=None)
         if st.button("Sair", use_container_width=True):
