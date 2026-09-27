@@ -281,11 +281,10 @@ def mostrar_dashboard():
         else:
             st.error(f"Cadeia CORROMPIDA ❌ no bloco #{idx_inv}: {motivo_inv}")
 
-    nomes_abas = ["🔎 Verificar", "⛓️ Blockchain"]
-    if papel == "EMISSOR":
-        nomes_abas = ["🎓 Emitir", "🚫 Revogar"] + nomes_abas
-    elif papel == "ADMINISTRADOR":
-        nomes_abas = ["🚫 Revogar", "🏛️ Emissores", "⚠️ Rejeitadas"] + nomes_abas
+    # Todas as abas aparecem para todos os papéis: quem decide se a operação é
+    # permitida é o CONTRATO, não a interface. Assim dá para demonstrar a rejeição
+    # de uma operação sem permissão (ex.: Carlos tentando emitir -> regra E1).
+    nomes_abas = ["🎓 Emitir", "🔎 Verificar", "🚫 Revogar", "🏛️ Emissores", "⛓️ Blockchain", "⚠️ Rejeitadas"]
 
     abas = st.tabs(nomes_abas)
     aba_de = dict(zip(nomes_abas, abas))
@@ -294,6 +293,8 @@ def mostrar_dashboard():
         with aba_de["🎓 Emitir"]:
             st.header("Emitir certificado")
             st.caption(f"A transação será assinada por **{nome_conta(conta)}** ({papel}).")
+            if papel != "EMISSOR":
+                st.warning("Esta conta não é emissora: o contrato inteligente vai **rejeitar** a emissão (regra E1).")
             with st.form("emitir", clear_on_submit=False):
                 c1, c2 = st.columns(2)
                 codigo = c1.text_input("Código do certificado", value=f"UEA-2026-{len(no.contrato.certificados) + 1:04d}")
@@ -335,12 +336,9 @@ def mostrar_dashboard():
         with aba_de["🚫 Revogar"]:
             st.header("Revogar certificado")
             st.caption(f"A transação será assinada por **{nome_conta(conta)}** ({papel}). Só o emissor original ou o administrador podem revogar.")
-            if papel == "ADMINISTRADOR":
-                opcoes_cert = list(no.contrato.certificados)
-            else:
-                opcoes_cert = [cod for cod, v in no.contrato.certificados.items() if v["emissor"] == conta]
+            opcoes_cert = list(no.contrato.certificados)  # o contrato rejeita quem não pode revogar (V3)
             if not opcoes_cert:
-                st.info("Nenhum certificado disponível para revogação com esta conta.")
+                st.info("Nenhum certificado emitido ainda.")
             else:
                 with st.form("revogar"):
                     cod_r = st.selectbox("Certificado", opcoes_cert,
@@ -364,6 +362,8 @@ def mostrar_dashboard():
             else:
                 st.info("Nenhum emissor autorizado ainda.")
             st.caption(f"As operações abaixo serão assinadas por **{nome_conta(conta)}** ({papel}).")
+            if papel != "ADMINISTRADOR":
+                st.warning("Só o administrador gerencia emissores: o contrato vai **rejeitar** (regras A1/R1).")
             opcoes = [c.endereco for c in no.carteiras]
             c1, c2 = st.columns(2)
             with c1.form("autorizar"):
