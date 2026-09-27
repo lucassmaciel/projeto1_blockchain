@@ -33,7 +33,7 @@ Um banco de dados comum permitiria que um administrador alterasse ou apagasse um
 
 ```mermaid
 flowchart LR
-    U[Usuário<br/>Streamlit app.py] -->|operação + conta| N[Nó local<br/>no.py]
+    U[Usuário<br/>Streamlit app.py] -->|login + operação| N[Nó local<br/>no.py]
     N -->|assina com a carteira| T[Transação assinada<br/>transacao.py + carteira.py]
     T --> C{Contrato inteligente<br/>contrato.py}
     C -->|regra violada| R[Log de rejeitadas<br/>não entra na cadeia]
@@ -47,11 +47,12 @@ flowchart LR
 |---|---|
 | `block.py` | Bloco: índice, timestamp, hash anterior, dados, nonce, hash SHA-256 e prova de trabalho (baseado no exemplo do professor) |
 | `blockchain.py` | Cadeia: gênesis, mineração, validação (elo, hash, prova de trabalho) e persistência em JSON |
-| `carteira.py` | Identidades: par de chaves Ed25519; endereço `0x…` derivado da chave pública |
+| `carteira.py` | Identidades: par de chaves Ed25519 com a chave privada cifrada pela senha (login = decifrar a chave); endereço `0x…` derivado da chave pública |
 | `transacao.py` | Transação assinada: tipo, remetente, chave pública, nonce, timestamp, payload, assinatura |
 | `contrato.py` | **Contrato inteligente** com as regras de negócio |
-| `no.py` | Nó local: passa a transação pelo contrato, minera, salva, registra rejeições, reconstrói o estado ao iniciar |
-| `app.py` | Interface Streamlit |
+| `no.py` | Nó local: login/cadastro, passa a transação pelo contrato, minera, salva, registra rejeições, reconstrói o estado ao iniciar |
+| `app.py` | Interface Streamlit: login, emitir, verificar (também sem login), revogar, emissores, explorador da blockchain e rejeitadas |
+| `tests/` | Testes automatizados (pytest): operações válidas, entradas inválidas, sem permissão, segurança e integridade da cadeia |
 
 **Estado derivado da cadeia:** o estado do contrato (emissores e certificados) não é salvo à parte — ao iniciar, o nó reexecuta todas as transações desde o bloco gênesis. A blockchain é a única fonte da verdade.
 
@@ -104,6 +105,7 @@ Requisitos: Python 3.10+.
 ```bash
 pip install -r requirements.txt
 streamlit run app.py          # interface em http://localhost:8501
+python -m pytest -v           # 59 testes automatizados
 python main.py                # demo do núcleo no terminal (como o exemplo do professor)
 ```
 
