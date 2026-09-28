@@ -1,29 +1,26 @@
 import pytest
 
 from contrato import hash_arquivo, hash_titular
-from no import CONTAS_PADRAO, No
+from no import No
 
 
 @pytest.fixture
 def no(tmp_path):
     """Nó novo, com dados em pasta temporária e dificuldade baixa para os testes rodarem rápido.
 
-    Atalho de teste: `no.enviar(endereco, tipo, payload)` autentica a conta com a senha
-    de demonstração e assina. No app real, a carteira autenticada vem do login.
+    Atalho de teste: `no.enviar(usuario, tipo, payload)` recebe o nome do usuário.
+    No app real, quem chama é a conta que fez login.
     """
     n = No(str(tmp_path / "dados"), dificuldade=2)
-    senhas = {c.endereco: senha for c, (_, senha) in zip(n.carteiras, CONTAS_PADRAO)}
     enviar_original = n.enviar
-    n.autenticada = lambda endereco: n.autenticar(endereco, senhas[endereco])
-    n.enviar = lambda endereco, tipo, payload: enviar_original(n.autenticada(endereco), tipo, payload)
+    n.enviar = lambda usuario, tipo, payload: enviar_original(n.conta(usuario), tipo, payload)
     return n
 
 
 @pytest.fixture
-def contas(no):
+def contas():
     """Reitoria (admin), secretarias EST e ESA (emissores no gênesis) e Caio (aluno, sem permissão no contrato)."""
-    admin, est, esa, aluno = (c.endereco for c in no.carteiras[:4])
-    return {"admin": admin, "est": est, "esa": esa, "aluno": aluno}
+    return {"admin": "reitoria", "est": "sec_est", "esa": "sec_esa", "aluno": "caio"}
 
 
 @pytest.fixture

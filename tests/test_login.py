@@ -1,112 +1,48 @@
-from pathlib import Path
 import json
 
-import no
-from carteira import Carteira, salvar_carteiras
+from contas import hash_senha
 from no import No
 
 
-def test_listar_usuarios_do_sistema_e_autenticar(tmp_path):
-    pasta = tmp_path / "demo"
-    no_obj = No(str(pasta), dificuldade=1)
-
-    usuarios = no_obj.listar_usuarios()
-    assert len(usuarios) >= 4
-
-    papels = {u["papel"] for u in usuarios}
-    assert {"ADMINISTRADOR", "EMISSOR", "ALUNO"}.issubset(papels)
-
-    admin = next(u for u in usuarios if u["papel"] == "ADMINISTRADOR")
-    carteira = no_obj.autenticar(admin["endereco"], admin["senha"])
-
-    assert carteira is not None
-    assert carteira.endereco == admin["endereco"]
+def test_login_com_senha_certa(tmp_path):
+    no = No(str(tmp_path / "dados"), dificuldade=1)
+    conta = no.autenticar("reitoria", "reitoria123")
+    assert conta is not None and conta.usuario == "reitoria"
 
 
-def test_recria_carteiras_demo_quando_arquivo_legacy_esta_malformado(tmp_path):
-    pasta = tmp_path / "demo"
-    pasta.mkdir()
-
-    (pasta / "carteiras.json").write_text(json.dumps([
-        {
-            "nome": "Reitoria UEA (administrador)",
-            "endereco": "0xabc",
-            "chave_privada": "00" * 32,
-        }
-    ]), encoding="utf-8")
-
-    no_obj = No(str(pasta), dificuldade=1)
-
-    assert no_obj.listar_usuarios()
-    assert {u["nome"] for u in no_obj.listar_usuarios()} >= {
-        "Reitoria UEA (administrador)",
-        "Secretaria Acadêmica EST/UEA",
-    }
+def test_login_com_senha_errada_ou_usuario_inexistente(tmp_path):
+    no = No(str(tmp_path / "dados"), dificuldade=1)
+    assert no.autenticar("reitoria", "errada") is None
+    assert no.autenticar("ninguem", "reitoria123") is None
 
 
-def test_recria_carteiras_quando_senha_foi_alterada_e_arquivo_stale_persistiu(tmp_path, monkeypatch):
-    pasta = tmp_path / "demo"
-    pasta.mkdir()
-
-    contas_antigas = [
-        ("Reitoria UEA (administrador)", "reitoria123"),
-        ("Secretaria Acadêmica EST/UEA", "est123"),
-        ("Secretaria Acadêmica ESA/UEA", "esa123"),
-        ("Caio", "caio123"),
-    ]
-    salvar_carteiras([Carteira.criar(nome, senha) for nome, senha in contas_antigas], str(pasta / "carteiras.json"))
-
-    senhas_novas = [
-        ("Reitoria UEA (administrador)", "nova-reitoria-2026"),
-        ("Secretaria Acadêmica EST/UEA", "nova-est-2026"),
-        ("Secretaria Acadêmica ESA/UEA", "nova-esa-2026"),
-        ("Caio", "nova-caio-2026"),
-    ]
-    monkeypatch.setattr(no, "CONTAS_PADRAO", senhas_novas)
-
-    no_obj = No(str(pasta), dificuldade=1)
-
-    admin = next(u for u in no_obj.listar_usuarios() if u["nome"] == "Reitoria UEA (administrador)")
-    assert no_obj.autenticar(admin["endereco"], "nova-reitoria-2026") is not None
-    assert no_obj.autenticar(admin["endereco"], "reitoria123") is None
+def test_caio_e_lucas_sao_alunos(tmp_path):
+    no = No(str(tmp_path / "dados"), dificuldade=1)
+    assert {c.nome for c in no.listar_alunos()} == {"Caio", "Lucas"}
+    assert no.papel_exibicao("caio") == "ALUNO"
+    assert no.papel_exibicao("sec_est") == "EMISSOR"
+    assert no.papel_exibicao("reitoria") == "ADMINISTRADOR"
 
 
-def test_registra_novo_aluno_com_matricula_e_login(tmp_path):
-    pasta = tmp_path / "demo"
-    no_obj = No(str(pasta), dificuldade=1)
-
-    cadastro = no_obj.registrar_usuario("Carlos Santos", "2026001", "carlos123")
-
-    assert cadastro is not None
-    assert cadastro["matricula"] == "2026001"
-
-    usuario = next(u for u in no_obj.listar_usuarios() if u["nome"] == "Carlos Santos")
-    assert usuario["matricula"] == "2026001"
-    assert no_obj.autenticar(cadastro["endereco"], "carlos123") is not None
+def test_cadastro_de_aluno(tmp_path):
+    no = No(str(tmp_path / "dados"), dificuldade=1)
+    nova = no.registrar_aluno("Ana Souza", "2021001", "ana123")
+    assert nova.usuario == "aluno_2021001"
+    assert no.autenticar("aluno_2021001", "ana123") is not None
+    assert no.registrar_aluno("Outra Ana", "2021001", "x") is None   # matrícula repetida
+    assert no.registrar_aluno("", "2021002", "x") is None            # campo vazio
 
 
-def test_admin_autentica_com_senha_fixa_conhecida(tmp_path):
-    pasta = tmp_path / "demo"
-    no_obj = No(str(pasta), dificuldade=1)
-
-    admin = next(u for u in no_obj.listar_usuarios() if u["papel"] == "ADMINISTRADOR")
-    assert no_obj.autenticar(admin["endereco"], "reitoria123") is not None
-    assert no_obj.autenticar(admin["endereco"], "senha-errada") is None
+def test_conta_cadastrada_continua_depois_de_reiniciar(tmp_path):
+    pasta = str(tmp_path / "dados")
+    No(pasta, dificuldade=1).registrar_aluno("Ana Souza", "2021001", "ana123")
+    assert No(pasta, dificuldade=1).autenticar("aluno_2021001", "ana123") is not None
 
 
-def test_contas_padrao_usam_senhas_fixas():
-    senhas = {nome: senha for nome, senha in no.CONTAS_PADRAO}
-    assert senhas["Reitoria UEA (administrador)"] == "reitoria123"
-    assert senhas["Secretaria Acadêmica EST/UEA"] == "est123"
-    assert senhas["Secretaria Acadêmica ESA/UEA"] == "esa123"
-    assert senhas["Caio"] == "caio123"
-
-
-def test_caio_e_lucas_sao_alunos_padrao(tmp_path):
-    no_obj = No(str(tmp_path / "demo"), dificuldade=1)
-    usuarios = {u["nome"]: u for u in no_obj.listar_usuarios()}
-    assert "Carlos" not in usuarios
-    for nome, senha in [("Caio", "caio123"), ("Lucas", "lucas123")]:
-        assert usuarios[nome]["papel"] == "ALUNO"
-        assert no_obj.autenticar(usuarios[nome]["endereco"], senha) is not None
-        assert no_obj.contrato.papel(usuarios[nome]["endereco"]) == "SEM PERMISSÃO"
+def test_senha_fica_salva_so_como_hash(tmp_path):
+    no = No(str(tmp_path / "dados"), dificuldade=1)
+    with open(no.arq_contas, encoding="utf-8") as f:
+        texto = f.read()
+    assert "reitoria123" not in texto
+    assert hash_senha("reitoria123") in texto
+    assert json.loads(texto)[0]["usuario"] == "reitoria"

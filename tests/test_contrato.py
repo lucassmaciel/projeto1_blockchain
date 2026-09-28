@@ -5,7 +5,6 @@ import pytest
 
 from contrato import ATIVO, REVOGADO, hash_arquivo, hash_titular
 from no import No
-from transacao import criar_transacao
 
 
 def rejeitada(r, regra):
@@ -16,11 +15,11 @@ def rejeitada(r, regra):
 class TestOperacoesValidas:
     def test_emissores_iniciais_vem_do_genesis(self, no, contas):
         genesis = no.cadeia.blocks[0].data
-        assert {e["endereco"] for e in genesis["emissores_iniciais"]} == {contas["est"], contas["esa"]}
+        assert {e["usuario"] for e in genesis["emissores_iniciais"]} == {contas["est"], contas["esa"]}
         assert no.contrato.papel(contas["est"]) == "EMISSOR"
 
     def test_admin_autoriza_emissor(self, no, contas):
-        r = no.enviar(contas["admin"], "AUTORIZAR_EMISSOR", {"endereco": contas["aluno"], "nome": "UEA, Pós-graduação"})
+        r = no.enviar(contas["admin"], "AUTORIZAR_EMISSOR", {"usuario": contas["aluno"], "nome": "UEA, Pós-graduação"})
         assert r["ok"] and r["bloco"]["index"] == 1
         assert no.contrato.papel(contas["aluno"]) == "EMISSOR"
 
@@ -56,26 +55,26 @@ class TestOperacoesValidas:
         assert no.enviar(contas["admin"], "REVOGAR_CERTIFICADO", {"codigo": "UEA-2026-0001", "motivo": "Fraude apurada"})["ok"]
 
     def test_admin_remove_emissor(self, no, contas):
-        assert no.enviar(contas["admin"], "REMOVER_EMISSOR", {"endereco": contas["est"]})["ok"]
+        assert no.enviar(contas["admin"], "REMOVER_EMISSOR", {"usuario": contas["est"]})["ok"]
         assert no.contrato.papel(contas["est"]) == "SEM PERMISSÃO"
 
     def test_certificado_continua_valido_apos_remover_emissor(self, no, contas, cert):
         no.enviar(contas["est"], "EMITIR_CERTIFICADO", cert)
-        no.enviar(contas["admin"], "REMOVER_EMISSOR", {"endereco": contas["est"]})
+        no.enviar(contas["admin"], "REMOVER_EMISSOR", {"usuario": contas["est"]})
         assert no.contrato.consultar("UEA-2026-0001")["status"] == ATIVO
 
 
 # ------------------------------------------------------------------ sem permissão
 class TestSemPermissao:
     def test_aluno_nao_autoriza_emissor(self, no, contas):
-        r = no.enviar(contas["aluno"], "AUTORIZAR_EMISSOR", {"endereco": contas["aluno"], "nome": "Eu mesmo"})
+        r = no.enviar(contas["aluno"], "AUTORIZAR_EMISSOR", {"usuario": contas["aluno"], "nome": "Eu mesmo"})
         assert rejeitada(r, "A1") and len(no.cadeia.blocks) == 1
 
     def test_aluno_nao_emite(self, no, contas, cert):
         assert rejeitada(no.enviar(contas["aluno"], "EMITIR_CERTIFICADO", cert), "E1")
 
     def test_emissor_removido_nao_emite(self, no, contas, cert):
-        no.enviar(contas["admin"], "REMOVER_EMISSOR", {"endereco": contas["est"]})
+        no.enviar(contas["admin"], "REMOVER_EMISSOR", {"usuario": contas["est"]})
         assert rejeitada(no.enviar(contas["est"], "EMITIR_CERTIFICADO", cert), "E1")
 
     def test_outro_emissor_nao_revoga(self, no, contas, cert):
@@ -84,7 +83,7 @@ class TestSemPermissao:
         assert rejeitada(r, "V3")
 
     def test_emissor_nao_remove_emissor(self, no, contas):
-        assert rejeitada(no.enviar(contas["est"], "REMOVER_EMISSOR", {"endereco": contas["est"]}), "R1")
+        assert rejeitada(no.enviar(contas["est"], "REMOVER_EMISSOR", {"usuario": contas["est"]}), "R1")
 
 
 # ------------------------------------------------------------------ entradas inválidas
@@ -128,14 +127,14 @@ class TestEntradasInvalidas:
         no.enviar(contas["est"], "EMITIR_CERTIFICADO", cert)
         assert rejeitada(no.enviar(contas["est"], "REVOGAR_CERTIFICADO", {"codigo": "UEA-2026-0001", "motivo": ""}), "V4")
 
-    def test_autorizar_endereco_invalido(self, no, contas):
-        assert rejeitada(no.enviar(contas["admin"], "AUTORIZAR_EMISSOR", {"endereco": "0x123", "nome": "X Y Z"}), "A2")
+    def test_autorizar_sem_usuario(self, no, contas):
+        assert rejeitada(no.enviar(contas["admin"], "AUTORIZAR_EMISSOR", {"usuario": "", "nome": "X Y Z"}), "A2")
 
     def test_admin_nao_pode_ser_emissor(self, no, contas):
-        assert rejeitada(no.enviar(contas["admin"], "AUTORIZAR_EMISSOR", {"endereco": contas["admin"], "nome": "Reitoria"}), "A4")
+        assert rejeitada(no.enviar(contas["admin"], "AUTORIZAR_EMISSOR", {"usuario": contas["admin"], "nome": "Reitoria"}), "A4")
 
     def test_autorizar_emissor_ja_ativo(self, no, contas):
-        r = no.enviar(contas["admin"], "AUTORIZAR_EMISSOR", {"endereco": contas["est"], "nome": "UEA, EST"})
+        r = no.enviar(contas["admin"], "AUTORIZAR_EMISSOR", {"usuario": contas["est"], "nome": "UEA, EST"})
         assert rejeitada(r, "A5")
 
     def test_operacao_desconhecida(self, no, contas):
@@ -148,25 +147,11 @@ class TestEntradasInvalidas:
         assert no.rejeitadas[-1]["regra"] == "E1"
 
 
-# ------------------------------------------------------------------ segurança das transações
-class TestSeguranca:
-    def _tx(self, no, conta, cert):
-        return criar_transacao(no.autenticada(conta), "EMITIR_CERTIFICADO", cert, no.contrato.proximo_nonce(conta))
-
-    def test_transacao_alterada_apos_assinatura(self, no, contas, cert):
-        tx = self._tx(no, contas["est"], cert)
-        tx["payload"] = {**tx["payload"], "curso": "Medicina"}
-        assert rejeitada(no.submeter(tx), "G4")
-
-    def test_aluno_se_passa_por_emissor(self, no, contas, cert):
-        tx = self._tx(no, contas["aluno"], cert)
-        tx["remetente"] = contas["est"]            # finge ser a secretaria, mas a chave é do aluno
-        assert rejeitada(no.submeter(tx), "G3")
-
-    def test_replay_de_transacao(self, no, contas, cert):
-        tx = self._tx(no, contas["est"], cert)
-        assert no.submeter(tx)["ok"]
-        assert rejeitada(no.submeter(tx), "G5")
+# ------------------------------------------------------------------ transações e nó
+class TestTransacoes:
+    def test_bloco_guarda_quem_enviou(self, no, contas, cert):
+        r = no.enviar(contas["est"], "EMITIR_CERTIFICADO", cert)
+        assert r["bloco"]["data"]["remetente"] == contas["est"]
 
     def test_transacao_mal_formada(self, no):
         assert rejeitada(no.submeter({"tipo": "EMITIR_CERTIFICADO"}), "G1")
@@ -200,12 +185,12 @@ class TestPersistencia:
 
     def test_cadastrar_aluno_e_reiniciar_nao_apaga_a_cadeia(self, no, contas, cert):
         no.enviar(contas["est"], "EMITIR_CERTIFICADO", cert)
-        no.registrar_usuario("Ana Souza", "2021001", "ana123")
+        no.registrar_aluno("Ana Souza", "2021001", "ana123")
         novo = No(no.pasta, dificuldade=2)
         assert len(novo.cadeia.blocks) == 2 and novo.contrato.admin == no.contrato.admin
 
     def test_emissor_removido_continua_removido_apos_reiniciar(self, no, contas):
-        no.enviar(contas["admin"], "REMOVER_EMISSOR", {"endereco": contas["esa"]})
+        no.enviar(contas["admin"], "REMOVER_EMISSOR", {"usuario": contas["esa"]})
         assert No(no.pasta, dificuldade=2).contrato.papel(contas["esa"]) == "SEM PERMISSÃO"
 
 
@@ -215,5 +200,5 @@ class TestAutenticacao:
         r = No.enviar(no, None, "EMITIR_CERTIFICADO", cert)
         assert rejeitada(r, "AUTH") and len(no.cadeia.blocks) == 1
 
-    def test_senha_errada_nao_desbloqueia_carteira(self, no, contas):
+    def test_senha_errada_nao_faz_login(self, no, contas):
         assert no.autenticar(contas["est"], "senha-errada") is None
