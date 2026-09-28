@@ -15,7 +15,7 @@ import streamlit as st
 from contrato import (ATIVO, AUTORIZAR_EMISSOR, EMITIR_CERTIFICADO, REMOVER_EMISSOR,
                       REVOGAR_CERTIFICADO, hash_arquivo, hash_titular)
 from diploma import gerar_diploma_pdf
-from no import ALUNOS_PADRAO, CONTAS_PADRAO, No
+from no import CONTAS_PADRAO, No
 
 PASTA_DADOS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dados")
 PASTA_DIPLOMAS = os.path.join(PASTA_DADOS, "diplomas")  # PDFs ficam FORA da blockchain
@@ -31,7 +31,7 @@ def obter_no():
 
 no = obter_no()
 
-st.session_state.setdefault("carteira_autenticada", None)
+st.session_state.setdefault("conta_logada", None)
 st.session_state.setdefault("resultado", None)
 st.session_state.setdefault("tela", "login")  # "login" ou "verificar" (sem login)
 st.session_state.setdefault("aviso", None)
@@ -48,19 +48,16 @@ PERMISSOES_PADRAO = ("- Verifica e baixa os próprios diplomas\n"
 
 # ------------------------------------------------------------------ utilidades
 def logado():
-    return st.session_state["carteira_autenticada"]
+    return st.session_state["conta_logada"]
 
 
 def sair():
-    if logado() is not None:
-        logado().bloquear()
-    st.session_state["carteira_autenticada"] = None
+    st.session_state["conta_logada"] = None
     st.session_state["resultado"] = None
 
 
-def nome_conta(endereco):
-    c = no.carteira(endereco)
-    return c.nome if c else (endereco[:10] + "..." if endereco else "-")
+def nome_conta(usuario):
+    return no.nome_conta(usuario) if usuario else "-"
 
 
 def quando(ts):
@@ -104,7 +101,7 @@ def mostrar_resultado(r):
 
 
 def enviar(chave, tipo, payload, pdf=None):
-    """Assina com a carteira desta sessão, submete ao nó e recarrega a página.
+    """Envia a transação em nome da conta logada, submete ao nó e recarrega a página.
     Se a emissão for aceita, guarda o PDF do diploma fora da blockchain."""
     r = no.enviar(logado(), tipo, payload)
     diploma = None
@@ -216,16 +213,15 @@ def tela_login():
     with esquerda:
         with st.container(border=True):
             st.subheader("Entrar")
-            usuarios = no.listar_usuarios()
-            mapa = {u["nome"]: u for u in usuarios}
+            contas = {c.usuario: c for c in no.listar_contas()}
             with st.form("login"):
-                nome_usuario = st.selectbox("Conta", list(mapa),
-                                            format_func=lambda n: f"{n} · {mapa[n]['papel']}")
+                usuario = st.selectbox("Conta", list(contas), format_func=lambda u: (
+                    f"{contas[u].nome} · {no.papel_exibicao(u)}"))
                 senha = st.text_input("Senha", type="password")
                 if st.form_submit_button("Entrar", type="primary", use_container_width=True):
-                    carteira = no.autenticar(mapa[nome_usuario]["endereco"], senha)
-                    if carteira:
-                        st.session_state["carteira_autenticada"] = carteira
+                    conta = no.autenticar(usuario, senha)
+                    if conta:
+                        st.session_state["conta_logada"] = conta
                         st.session_state["resultado"] = None
                         st.rerun()
                     st.error("Senha incorreta.")
@@ -237,11 +233,11 @@ def tela_login():
                     if st.form_submit_button("Criar conta"):
                         if not nome_novo.strip() or not matricula_nova.strip() or not senha_nova.strip():
                             st.warning("Preencha nome, matrícula e senha.")
-                        elif no.registrar_usuario(nome_novo, matricula_nova, senha_nova):
+                        elif no.registrar_aluno(nome_novo, matricula_nova, senha_nova):
                             st.session_state["aviso"] = f"Conta criada para {nome_novo.strip()}. Já pode entrar."
                             st.rerun()
                         else:
-                            st.warning("Já existe um aluno com esse nome e matrícula.")
+                            st.warning("Já existe um aluno com essa matrícula.")
 
     with direita:
         with st.container(border=True):
@@ -251,9 +247,8 @@ def tela_login():
                 st.session_state["tela"] = "verificar"
                 st.rerun()
         with st.expander("Contas de demonstração"):
-            senhas_demo = dict(CONTAS_PADRAO) | {a["nome"]: a["senha"] for a in ALUNOS_PADRAO}
-            st.dataframe(pd.DataFrame([{"Conta": u["nome"], "Papel": u["papel"], "Senha": senhas_demo[u["nome"]]}
-                                       for u in no.listar_usuarios() if u["nome"] in senhas_demo]),
+            st.dataframe(pd.DataFrame([{"Conta": c["nome"], "Papel": no.papel_exibicao(c["usuario"]),
+                                        "Senha": c["senha"]} for c in CONTAS_PADRAO]),
                          hide_index=True, use_container_width=True)
             st.caption("Senhas fixas apenas para a apresentação. Alunos cadastrados usam a senha que escolheram.")
 
@@ -269,11 +264,11 @@ def tela_verificacao_publica():
 # ------------------------------------------------------------------ abas do painel
 def aba_meus_diplomas(conta, papel):
     st.subheader("Meus diplomas")
-    usuario = next((u for u in no.usuarios if u.get("endereco") == conta and u.get("matricula")), None)
-    if not usuario:
+    aluno = no.conta(conta)
+    if not aluno or not aluno.matricula:
         st.info("Esta conta não é de aluno.")
         return
-    titular = hash_titular(usuario["nome"], usuario["matricula"])
+    titular = hash_titular(aluno.nome, aluno.matricula)
     meus = [c for c in no.contrato.certificados.values() if c["titular_hash"] == titular]
     st.caption("A busca compara o hash do seu nome + matrícula com o que está registrado na blockchain. "
                "Seu nome e sua matrícula não ficam na cadeia.")
@@ -286,13 +281,13 @@ def aba_meus_diplomas(conta, papel):
 
 def aba_emitir(conta, papel):
     st.subheader("Emitir diploma")
-    st.caption(f"A transação será assinada por **{nome_conta(conta)}** ({papel}). "
+    st.caption(f"A transação será enviada por **{nome_conta(conta)}** ({papel}). "
                "O PDF do diploma é gerado a partir dos dados; só o hash dele vai para a blockchain.")
     if papel != "EMISSOR":
         st.warning("Esta conta não é emissora: o contrato inteligente vai rejeitar a emissão (regra E1).")
 
     alunos = no.listar_alunos()
-    opcoes = [f"{a['nome']} ({a['matricula']})" for a in alunos] + ["Outro aluno (digitar)"]
+    opcoes = [f"{a.nome} ({a.matricula})" for a in alunos] + ["Outro aluno (digitar)"]
     with st.container(border=True):
         c1, c2 = st.columns(2)
         escolha = c1.selectbox("Aluno", opcoes, key="em_aluno")
@@ -301,7 +296,7 @@ def aba_emitir(conta, papel):
             matricula = c2.text_input("Matrícula", key="em_mat")
         else:
             aluno = alunos[opcoes.index(escolha)]
-            nome, matricula = aluno["nome"], str(aluno["matricula"])
+            nome, matricula = aluno.nome, aluno.matricula
             c2.text_input("Matrícula", value=matricula, disabled=True, key=f"em_mat_{escolha}")
         curso = c1.text_input("Curso", value="Sistemas de Informação", key="em_curso")
         codigo = c2.text_input("Código do diploma", value=f"UEA-2026-{len(no.contrato.certificados) + 1:04d}",
@@ -339,7 +334,7 @@ def aba_verificar(conta, papel):
 
 def aba_revogar(conta, papel):
     st.subheader("Revogar diploma")
-    st.caption(f"A transação será assinada por **{nome_conta(conta)}** ({papel}). "
+    st.caption(f"A transação será enviada por **{nome_conta(conta)}** ({papel}). "
                "Só o emissor original ou o administrador podem revogar.")
     if papel not in ("EMISSOR", "ADMINISTRADOR"):
         st.warning("Esta conta não pode revogar: o contrato vai rejeitar (regra V3).")
@@ -363,23 +358,23 @@ def aba_emissores(conta, papel):
     if papel != "ADMINISTRADOR":
         st.warning("Só o administrador gerencia emissores: o contrato vai rejeitar (regras A1/R1).")
     st.dataframe(pd.DataFrame([{
-        "Instituição": e["nome"], "Conta": nome_conta(e["endereco"]), "Endereço": e["endereco"],
+        "Instituição": e["nome"], "Conta": nome_conta(e["usuario"]), "Usuário": e["usuario"],
         "Ativo": "Sim" if e["ativo"] else "Não", "Autorizado no bloco": e["autorizado_no_bloco"],
         "Removido no bloco": e["removido_no_bloco"]} for e in no.contrato.emissores.values()]),
         hide_index=True, use_container_width=True)
-    opcoes = [c.endereco for c in no.carteiras]
+    opcoes = [c.usuario for c in no.listar_contas()]
     c1, c2 = st.columns(2)
     with c1.form("autorizar"):
         st.markdown("##### Autorizar emissor")
         alvo = st.selectbox("Conta", opcoes, format_func=nome_conta, key="alvo_aut")
         inst = st.text_input("Nome da instituição/setor", value="UEA, Escola Superior de Tecnologia")
         if st.form_submit_button("Autorizar", type="primary"):
-            enviar("emissores", AUTORIZAR_EMISSOR, {"endereco": alvo, "nome": inst})
+            enviar("emissores", AUTORIZAR_EMISSOR, {"usuario": alvo, "nome": inst})
     with c2.form("remover"):
         st.markdown("##### Remover emissor")
         alvo_r = st.selectbox("Conta", opcoes, format_func=nome_conta, key="alvo_rem")
         if st.form_submit_button("Remover"):
-            enviar("emissores", REMOVER_EMISSOR, {"endereco": alvo_r})
+            enviar("emissores", REMOVER_EMISSOR, {"usuario": alvo_r})
     exibir_resultado("emissores")
 
 
@@ -398,7 +393,7 @@ def aba_blockchain(conta, papel):
         if blocos_tx:
             i = st.selectbox("Bloco", blocos_tx)
             payload_i = no.cadeia.blocks[i].data["payload"]
-            campo = next((k for k in ("curso", "nome", "motivo", "codigo", "endereco") if k in payload_i), None)
+            campo = next((k for k in ("curso", "nome", "motivo", "codigo", "usuario") if k in payload_i), None)
             novo = st.text_input(f"Novo valor para '{campo}'", value="Medicina")
             a, r = st.columns(2)
             if a.button("Adulterar bloco", type="primary"):
@@ -415,7 +410,7 @@ def aba_blockchain(conta, papel):
         with st.container(border=True):
             titulo = f"**Bloco #{b.index}** · `{tipo}`"
             if b.index > 0:
-                titulo += f" · assinado por {nome_conta(b.data.get('remetente'))}"
+                titulo += f" · enviado por {nome_conta(b.data.get('remetente'))}"
             if not valida and b.index == idx_inv:
                 titulo += "  :red[**inválido**]"
             st.markdown(titulo)
@@ -459,16 +454,15 @@ ORDEM_PADRAO = ["meus", "verificar", "cadeia", "emitir", "revogar", "emissores",
 
 
 def painel():
-    carteira = logado()
-    conta = carteira.endereco
+    logada = logado()
+    conta = logada.usuario
     papel = no.contrato.papel(conta)
 
     with st.sidebar:
         st.title("CertChain UEA")
         papel_tela = no.papel_exibicao(conta)
-        st.markdown(f"**{carteira.nome}**  \n:{COR_PAPEL.get(papel_tela, 'red')}[**{papel_tela}**]")
-        st.caption("Endereço na blockchain (público)")
-        st.code(conta, language=None)
+        st.markdown(f"**{logada.nome}**  \n:{COR_PAPEL.get(papel_tela, 'red')}[**{papel_tela}**]")
+        st.caption(f"Usuário: {conta}")
         if st.button("Sair", use_container_width=True):
             sair()
             st.rerun()
@@ -476,7 +470,7 @@ def painel():
         st.caption("O que esta conta pode fazer, segundo o contrato")
         st.markdown(PERMISSOES.get(papel, PERMISSOES_PADRAO))
 
-    st.title(f"Olá, {carteira.nome.split(' (')[0]}")
+    st.title(f"Olá, {logada.nome.split(' (')[0]}")
     metricas_cadeia()
     ordem = ORDEM_POR_PAPEL.get(papel, ORDEM_PADRAO)
     for chave, aba in zip(ordem, st.tabs([ABAS[k][0] for k in ordem])):
