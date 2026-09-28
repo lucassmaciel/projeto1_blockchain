@@ -8,7 +8,7 @@ Hoje o diploma circula como PDF, e qualquer editor de PDF troca o curso ou a car
 
 ## Como o CertChain resolve
 
-A secretaria preenche os dados do aluno e o sistema gera o PDF do diploma. O hash SHA-256 desse arquivo vai para a blockchain numa transação que a secretaria assina com a chave dela.
+A secretaria preenche os dados do aluno e o sistema gera o PDF do diploma. O hash SHA-256 desse arquivo vai para a blockchain numa transação enviada pela conta da secretaria.
 
 Quem recebe o diploma abre a tela de verificação e envia o PDF. Se o hash estiver registrado e ativo, o diploma é autêntico. Basta mudar um byte do arquivo para o hash mudar e o sistema deixar de reconhecê-lo.
 
@@ -16,14 +16,14 @@ A Reitoria decide quais secretarias podem emitir. Se um diploma sair com erro, a
 
 ## Por que blockchain
 
-Num banco de dados comum, o administrador edita um registro e ninguém fica sabendo. Na blockchain, cada bloco carrega o hash do bloco anterior. Se alguém edita um registro antigo, a validação da cadeia aponta o bloco adulterado. Cada transação também leva a assinatura digital (Ed25519) de quem a enviou, então dá para saber quem emitiu cada diploma. As regras ficam no contrato, que as aplica do mesmo jeito para todo mundo, e na cadeia só entram hashes, o que permite verificar sem expor dados pessoais.
+Num banco de dados comum, o administrador edita um registro e ninguém fica sabendo. Na blockchain, cada bloco carrega o hash do bloco anterior. Se alguém edita um registro antigo, a validação da cadeia aponta o bloco adulterado. Cada transação também registra quem a enviou, então dá para saber quem emitiu cada diploma. As regras ficam no contrato, que as aplica do mesmo jeito para todo mundo, e na cadeia só entram hashes, o que permite verificar sem expor dados pessoais.
 
 ## Arquitetura
 
 ```mermaid
 flowchart LR
     U[Usuário<br/>app.py] -->|login + operação| N[Nó local<br/>no.py]
-    N -->|assina| T[Transação<br/>transacao.py]
+    N -->|monta| T[Transação<br/>transacao.py]
     T --> C{Contrato<br/>contrato.py}
     C -->|regra violada| R[Log de rejeitadas]
     C -->|regras OK| M[Bloco + prova de trabalho<br/>block.py]
@@ -35,8 +35,8 @@ flowchart LR
 | Arquivo | Função |
 |---|---|
 | `block.py`, `blockchain.py` | Blocos, prova de trabalho, validação da cadeia e gravação em disco. A base veio do exemplo que o professor passou em aula |
-| `carteira.py` | Par de chaves Ed25519 de cada conta. A chave privada fica cifrada com a senha, e o login consiste em decifrá-la |
-| `transacao.py` | Monta e assina as transações |
+| `contas.py` | Contas de usuário. A senha é guardada como hash SHA-256, nunca em texto |
+| `transacao.py` | Monta a transação: tipo, remetente, horário e dados |
 | `contrato.py` | Contrato inteligente com as regras de negócio |
 | `no.py` | Nó local: login, cadastro de alunos, envio das transações ao contrato e mineração |
 | `diploma.py` | Gera o PDF do diploma |
@@ -53,8 +53,8 @@ O contrato confere todas as regras antes de alterar qualquer dado. Se uma falha,
 
 | Regra | Operação | O que o contrato exige |
 |---|---|---|
-| G1 a G5 | todas | campos completos, operação conhecida, remetente igual à chave pública, assinatura válida e nonce em sequência (contra replay) |
-| A1 a A5 | autorizar emissor | só o admin; endereço válido; nome com 3 a 100 caracteres; o admin não pode ser emissor; o emissor ainda não pode estar ativo |
+| G1 e G2 | todas | campos completos e operação conhecida |
+| A1 a A5 | autorizar emissor | só o admin; usuário informado; nome com 3 a 100 caracteres; o admin não pode ser emissor; o emissor ainda não pode estar ativo |
 | R1 e R2 | remover emissor | só o admin, e o emissor precisa estar ativo |
 | E1 a E9 | emitir diploma | emissor ativo; código no formato `A-Z0-9-` e inédito; hash do PDF válido e inédito; hash do titular válido; curso com 3 a 120 caracteres; carga horária de 1 a 20000; data de conclusão que não esteja no futuro |
 | V1 a V4 | revogar diploma | o diploma existe e está ativo; quem revoga é o emissor original ou o admin; motivo com 5 a 200 caracteres |
@@ -62,7 +62,7 @@ O contrato confere todas as regras antes de alterar qualquer dado. Se uma falha,
 
 ## O que fica na blockchain
 
-Na cadeia ficam o hash do PDF, o hash do titular (matrícula + nome), o código, o curso, a carga horária, a data de conclusão, a instituição que emitiu, o status do diploma e, em cada transação, a assinatura, o nonce e o horário.
+Na cadeia ficam o hash do PDF, o hash do titular (matrícula + nome), o código, o curso, a carga horária, a data de conclusão, a instituição que emitiu, o status do diploma e, em cada transação, quem enviou e o horário.
 
 Ficam de fora o PDF, o nome, a matrícula e o CPF do aluno, as senhas e o log de rejeitadas. Quem tem o PDF, ou o nome e a matrícula, consegue conferir o diploma. Quem olha só a cadeia vê hashes.
 
@@ -74,11 +74,6 @@ Ficam de fora o PDF, o nome, a matrícula e o CPF do aluno, as senhas e o log de
 pip install -r requirements.txt
 streamlit run app.py      # abre em http://localhost:8501
 python -m pytest -v       # testes
-python main.py            # núcleo da blockchain no terminal
 ```
 
-No Windows, o `executar.bat` instala as dependências e abre o app.
-
 Na primeira execução, o app cria a pasta `dados/` com a blockchain e as contas de demonstração. A tela de login lista essas contas e as senhas. Para começar do zero, apague `dados/`.
-
-A pasta `exemplos/` tem diplomas em PDF para testar a verificação, incluindo um adulterado.
