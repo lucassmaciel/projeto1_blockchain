@@ -1,24 +1,20 @@
 # contrato.py
 # CONTRATO INTELIGENTE de certificação acadêmica.
 #
-# Toda transação passa por este contrato ANTES de virar bloco:
-#   - se alguma regra for violada -> ErroContrato (a transação é rejeitada e NÃO entra na cadeia);
-#   - se todas as regras passarem -> o estado do contrato é atualizado e o bloco é minerado.
+# Toda transação passa por este contrato antes de virar bloco:
+#   - se alguma regra falhar, ele lança ErroContrato e a transação NÃO entra na cadeia;
+#   - se todas as regras passarem, ele atualiza o estado e o nó minera o bloco.
 #
-# O estado (emissores, certificados, nonces) NÃO é guardado à parte: ele é
-# reconstruído reexecutando as transações da cadeia desde o gênesis. Logo, a
-# blockchain é a única fonte da verdade.
+# O estado (emissores e certificados) não é salvo à parte. Quando o nó inicia,
+# ele reexecuta todas as transações da cadeia desde o bloco gênesis.
 #
-# Operações:  AUTORIZAR_EMISSOR, REMOVER_EMISSOR  (somente administrador)
-#             EMITIR_CERTIFICADO, REVOGAR_CERTIFICADO (emissores autorizados)
-#             consultas/verificação (qualquer pessoa, sem transação)
+# Operações: AUTORIZAR_EMISSOR e REMOVER_EMISSOR (só o administrador)
+#            EMITIR_CERTIFICADO e REVOGAR_CERTIFICADO (secretarias autorizadas)
+#            a consulta de certificados é pública e não cria transação
 import hashlib
 import re
 import unicodedata
 from datetime import date, datetime
-
-from carteira import endereco_de, verificar_assinatura
-from transacao import CAMPOS, mensagem_para_assinar
 
 AUTORIZAR_EMISSOR = "AUTORIZAR_EMISSOR"
 REMOVER_EMISSOR = "REMOVER_EMISSOR"
@@ -29,13 +25,12 @@ OPERACOES = (AUTORIZAR_EMISSOR, REMOVER_EMISSOR, EMITIR_CERTIFICADO, REVOGAR_CER
 ATIVO = "ATIVO"
 REVOGADO = "REVOGADO"
 
-RE_ENDERECO = re.compile(r"^0x[0-9a-f]{40}$")
 RE_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 RE_CODIGO = re.compile(r"^[A-Z0-9][A-Z0-9-]{3,39}$")
 
 
 class ErroContrato(Exception):
-    """Violação de regra de negócio. `regra` identifica a regra (ex.: E1)."""
+    """Regra de negócio violada. `regra` diz qual foi (ex.: E1)."""
 
     def __init__(self, regra, mensagem):
         super().__init__(f"[{regra}] {mensagem}")
@@ -49,7 +44,7 @@ def _normalizar_nome(nome):
 
 
 def hash_titular(nome, matricula):
-    """Hash que identifica o titular sem expor nome/matrícula na cadeia."""
+    """Hash que identifica o aluno sem colocar nome e matrícula na cadeia."""
     return hashlib.sha256(f"{matricula.strip()}|{_normalizar_nome(nome)}".encode("utf-8")).hexdigest()
 
 
@@ -66,78 +61,58 @@ def _texto(payload, campo, regra, minimo, maximo):
 
 class ContratoCertificados:
     def __init__(self, admin, emissores_iniciais=()):
-        """`emissores_iniciais` vem do bloco gênesis: [{endereco, nome}, ...]."""
+        """`admin` e `emissores_iniciais` vêm do bloco gênesis."""
         self.admin = admin
-        self.emissores = {}          # endereco -> {nome, ativo, autorizado_no_bloco, removido_no_bloco}
+        self.emissores = {}       # usuario -> {usuario, nome, ativo, autorizado_no_bloco, removido_no_bloco}
+        self.certificados = {}    # codigo -> dados do certificado
+        self.codigo_por_hash = {} # hash do PDF -> codigo
         for e in emissores_iniciais:
-            self.emissores[e["endereco"]] = {"endereco": e["endereco"], "nome": e["nome"], "ativo": True,
-                                             "autorizado_no_bloco": 0, "removido_no_bloco": None}
-        self.certificados = {}       # codigo -> dados do certificado
-        self.codigo_por_hash = {}    # documento_hash -> codigo
-        self.nonces = {}             # endereco -> último nonce usado
+            self.emissores[e["usuario"]] = {"usuario": e["usuario"], "nome": e["nome"], "ativo": True,
+                                            "autorizado_no_bloco": 0, "removido_no_bloco": None}
 
     # ================================================================ execução
-    def executar(self, tx, bloco_index):
-        """Valida TODAS as regras e só então altera o estado (tudo ou nada)."""
-        self._validar_transacao(tx)
-        operacao = {
-            AUTORIZAR_EMISSOR: self._autorizar_emissor,
-            REMOVER_EMISSOR: self._remover_emissor,
-            EMITIR_CERTIFICADO: self._emitir,
-            REVOGAR_CERTIFICADO: self._revogar,
-        }[tx["tipo"]]
-        aplicar = operacao(tx, bloco_index)  # valida regras específicas; devolve a mudança de estado
-        aplicar()
-        self.nonces[tx["remetente"]] = tx["nonce"]
-
-    # ------------------------------------------------ regras gerais (G1 a G5)
-    def _validar_transacao(self, tx):
-        if not isinstance(tx, dict) or any(c not in tx for c in CAMPOS) or not isinstance(tx.get("payload"), dict):
-            raise ErroContrato("G1", "transação mal formada (campos obrigatórios ausentes)")
-        if tx["tipo"] not in OPERACOES:
+    def executar(self, tx, bloco):
+        """Confere as regras da transação e, se todas passarem, atualiza o estado."""
+        if not isinstance(tx, dict) or any(c not in tx for c in ("tipo", "remetente", "timestamp", "payload")) \
+                or not isinstance(tx.get("payload"), dict):
+            raise ErroContrato("G1", "transação mal formada (faltam campos obrigatórios)")
+        if tx["tipo"] == AUTORIZAR_EMISSOR:
+            self._autorizar_emissor(tx, bloco)
+        elif tx["tipo"] == REMOVER_EMISSOR:
+            self._remover_emissor(tx, bloco)
+        elif tx["tipo"] == EMITIR_CERTIFICADO:
+            self._emitir(tx, bloco)
+        elif tx["tipo"] == REVOGAR_CERTIFICADO:
+            self._revogar(tx, bloco)
+        else:
             raise ErroContrato("G2", f"operação desconhecida: {tx['tipo']}")
-        try:
-            endereco = endereco_de(tx["chave_publica"])
-        except (ValueError, TypeError):
-            raise ErroContrato("G3", "chave pública inválida")
-        if tx["remetente"] != endereco:
-            raise ErroContrato("G3", "remetente não corresponde à chave pública")
-        if not verificar_assinatura(tx["chave_publica"], mensagem_para_assinar(tx), tx["assinatura"]):
-            raise ErroContrato("G4", "assinatura digital inválida (transação forjada ou alterada)")
-        esperado = self.proximo_nonce(tx["remetente"])
-        if tx["nonce"] != esperado:
-            raise ErroContrato("G5", f"nonce {tx['nonce']} inválido, esperado {esperado} (possível replay)")
 
     # ------------------------------------------------ administração (A*, R*)
     def _autorizar_emissor(self, tx, bloco):
         p = tx["payload"]
         if tx["remetente"] != self.admin:
             raise ErroContrato("A1", "permissão negada: somente o administrador autoriza emissores")
-        endereco = p.get("endereco")
-        if not isinstance(endereco, str) or not RE_ENDERECO.match(endereco):
-            raise ErroContrato("A2", "endereço de emissor inválido")
+        usuario = p.get("usuario")
+        if not isinstance(usuario, str) or not usuario.strip():
+            raise ErroContrato("A2", "informe o usuário que será autorizado")
         nome = _texto(p, "nome", "A3", 3, 100)
-        if endereco == self.admin:
+        if usuario == self.admin:
             raise ErroContrato("A4", "o administrador não pode ser emissor (separação de funções)")
-        if self.emissores.get(endereco, {}).get("ativo"):
+        if self.emissores.get(usuario, {}).get("ativo"):
             raise ErroContrato("A5", "emissor já está autorizado")
 
-        def aplicar():
-            self.emissores[endereco] = {"endereco": endereco, "nome": nome, "ativo": True,
-                                        "autorizado_no_bloco": bloco, "removido_no_bloco": None}
-        return aplicar
+        self.emissores[usuario] = {"usuario": usuario, "nome": nome, "ativo": True,
+                                   "autorizado_no_bloco": bloco, "removido_no_bloco": None}
 
     def _remover_emissor(self, tx, bloco):
         if tx["remetente"] != self.admin:
             raise ErroContrato("R1", "permissão negada: somente o administrador remove emissores")
-        endereco = tx["payload"].get("endereco")
-        if not self.emissores.get(endereco, {}).get("ativo"):
+        usuario = tx["payload"].get("usuario")
+        if not self.emissores.get(usuario, {}).get("ativo"):
             raise ErroContrato("R2", "emissor não encontrado ou já removido")
 
-        def aplicar():
-            self.emissores[endereco]["ativo"] = False
-            self.emissores[endereco]["removido_no_bloco"] = bloco
-        return aplicar
+        self.emissores[usuario]["ativo"] = False
+        self.emissores[usuario]["removido_no_bloco"] = bloco
 
     # ------------------------------------------------ certificados (E*, V*)
     def _emitir(self, tx, bloco):
@@ -169,18 +144,16 @@ class ContratoCertificados:
         if conclusao > datetime.fromtimestamp(tx["timestamp"]).date():
             raise ErroContrato("E9", "data de conclusão não pode estar no futuro")
 
-        def aplicar():
-            self.certificados[codigo] = {
-                "codigo": codigo, "documento_hash": doc, "titular_hash": titular,
-                "curso": curso, "carga_horaria": carga, "data_conclusao": conclusao.isoformat(),
-                "instituicao": emissor["nome"], "emissor": tx["remetente"],
-                "status": ATIVO, "emitido_no_bloco": bloco, "emitido_em": tx["timestamp"],
-                "revogacao": None,
-                "historico": [{"operacao": EMITIR_CERTIFICADO, "bloco": bloco,
-                               "por": tx["remetente"], "timestamp": tx["timestamp"]}],
-            }
-            self.codigo_por_hash[doc] = codigo
-        return aplicar
+        self.certificados[codigo] = {
+            "codigo": codigo, "documento_hash": doc, "titular_hash": titular,
+            "curso": curso, "carga_horaria": carga, "data_conclusao": conclusao.isoformat(),
+            "instituicao": emissor["nome"], "emissor": tx["remetente"],
+            "status": ATIVO, "emitido_no_bloco": bloco, "emitido_em": tx["timestamp"],
+            "revogacao": None,
+            "historico": [{"operacao": EMITIR_CERTIFICADO, "bloco": bloco,
+                           "por": tx["remetente"], "timestamp": tx["timestamp"]}],
+        }
+        self.codigo_por_hash[doc] = codigo
 
     def _revogar(self, tx, bloco):
         p = tx["payload"]
@@ -195,21 +168,16 @@ class ContratoCertificados:
             raise ErroContrato("V3", "permissão negada: só o emissor original ou o administrador revoga")
         motivo = _texto(p, "motivo", "V4", 5, 200)
 
-        def aplicar():
-            cert["status"] = REVOGADO
-            cert["revogacao"] = {"motivo": motivo, "bloco": bloco, "por": rem, "timestamp": tx["timestamp"]}
-            cert["historico"].append({"operacao": REVOGAR_CERTIFICADO, "bloco": bloco,
-                                      "por": rem, "timestamp": tx["timestamp"]})
-        return aplicar
+        cert["status"] = REVOGADO
+        cert["revogacao"] = {"motivo": motivo, "bloco": bloco, "por": rem, "timestamp": tx["timestamp"]}
+        cert["historico"].append({"operacao": REVOGAR_CERTIFICADO, "bloco": bloco,
+                                  "por": rem, "timestamp": tx["timestamp"]})
 
     # ================================================================ consultas
-    def proximo_nonce(self, endereco):
-        return self.nonces.get(endereco, 0) + 1
-
-    def papel(self, endereco):
-        if endereco == self.admin:
+    def papel(self, usuario):
+        if usuario == self.admin:
             return "ADMINISTRADOR"
-        if self.emissores.get(endereco, {}).get("ativo"):
+        if self.emissores.get(usuario, {}).get("ativo"):
             return "EMISSOR"
         return "SEM PERMISSÃO"
 

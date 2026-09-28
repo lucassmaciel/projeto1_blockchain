@@ -1,26 +1,14 @@
 # transacao.py
-# Uma transação é um pedido assinado para executar uma operação do contrato.
-# O que é assinado: tipo + remetente + chave pública + nonce + timestamp + payload.
-# Qualquer alteração em qualquer campo invalida a assinatura.
+# Uma transação é o pedido de uma operação ao contrato: quem pediu (remetente),
+# o tipo da operação, quando foi pedida e os dados (payload).
+# O nó passa a transação pelo contrato e, se ela for aceita, grava no bloco.
 import time
 
-from block import json_canonico
 
-CAMPOS = ("tipo", "remetente", "chave_publica", "nonce", "timestamp", "payload", "assinatura")
-
-
-def mensagem_para_assinar(tx):
-    return json_canonico({k: tx[k] for k in CAMPOS if k != "assinatura"})
-
-
-def criar_transacao(carteira, tipo, payload, nonce, timestamp=None):
-    tx = {
+def criar_transacao(remetente, tipo, payload, timestamp=None):
+    return {
         "tipo": tipo,
-        "remetente": carteira.endereco,
-        "chave_publica": carteira.chave_publica,
-        "nonce": nonce,
+        "remetente": remetente,
         "timestamp": timestamp if timestamp is not None else time.time(),
         "payload": payload,
     }
-    tx["assinatura"] = carteira.assinar(mensagem_para_assinar(tx))
-    return tx
