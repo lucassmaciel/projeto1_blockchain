@@ -278,7 +278,7 @@ def aba_emitir(conta, papel):
     st.caption(f"A transação será enviada por **{nome_conta(conta)}** ({papel}). "
                "O PDF do diploma é gerado a partir dos dados; só o hash dele vai para a blockchain.")
     if papel != "EMISSOR":
-        st.warning("Esta conta não é emissora: o contrato inteligente vai rejeitar a emissão (regra E1).")
+        st.warning("Esta conta não é emissora.")
 
     alunos = no.listar_alunos()
     opcoes = [f"{a.nome} ({a.matricula})" for a in alunos] + ["Outro aluno (digitar)"]
