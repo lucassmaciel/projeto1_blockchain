@@ -15,7 +15,7 @@ import streamlit as st
 from contrato import (ATIVO, AUTORIZAR_EMISSOR, EMITIR_CERTIFICADO, REMOVER_EMISSOR,
                       REVOGAR_CERTIFICADO, hash_arquivo, hash_titular)
 from diploma import gerar_diploma_pdf
-from no import CONTAS_PADRAO, No
+from no import No
 
 PASTA_DADOS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dados")
 PASTA_DIPLOMAS = os.path.join(PASTA_DADOS, "diplomas")  # PDFs ficam FORA da blockchain
@@ -206,7 +206,6 @@ def tela_login():
     st.caption("Registro de diplomas da UEA em uma blockchain local. Qualquer pessoa pode conferir se um diploma é autêntico.")
     if st.session_state.get("aviso"):
         st.success(st.session_state.pop("aviso"))
-    metricas_cadeia()
     st.write("")
 
     esquerda, direita = st.columns(2, gap="large")
@@ -246,11 +245,6 @@ def tela_login():
             if st.button("Verificar um diploma", use_container_width=True):
                 st.session_state["tela"] = "verificar"
                 st.rerun()
-        with st.expander("Contas de demonstração"):
-            st.dataframe(pd.DataFrame([{"Conta": c["nome"], "Papel": no.papel_exibicao(c["usuario"]),
-                                        "Senha": c["senha"]} for c in CONTAS_PADRAO]),
-                         hide_index=True, use_container_width=True)
-            st.caption("Senhas fixas apenas para a apresentação. Alunos cadastrados usam a senha que escolheram.")
 
 
 def tela_verificacao_publica():

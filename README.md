@@ -76,4 +76,4 @@ streamlit run app.py      # abre em http://localhost:8501
 python -m pytest -v       # testes
 ```
 
-Na primeira execução, o app cria a pasta `dados/` com a blockchain e as contas de demonstração. A tela de login lista essas contas e as senhas. Para começar do zero, apague `dados/`.
+Na primeira execução, o app cria a pasta `dados/` com a blockchain e as contas de demonstração. Para começar do zero, apague `dados/`.
