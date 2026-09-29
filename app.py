@@ -331,7 +331,7 @@ def aba_revogar(conta, papel):
     st.caption(f"A transação será enviada por **{nome_conta(conta)}** ({papel}). "
                "Só o emissor original ou o administrador podem revogar.")
     if papel not in ("EMISSOR", "ADMINISTRADOR"):
-        st.warning("Esta conta não pode revogar: o contrato vai rejeitar (regra V3).")
+        st.warning("Esta conta não pode revogar.")
     certs = no.contrato.certificados
     if not certs:
         st.info("Nenhum diploma emitido ainda.")
@@ -350,7 +350,7 @@ def aba_emissores(conta, papel):
     st.caption(f"Administrador (definido no bloco gênesis): **{nome_conta(no.contrato.admin)}**. "
                "Emissores com bloco 0 foram definidos no próprio gênesis.")
     if papel != "ADMINISTRADOR":
-        st.warning("Só o administrador gerencia emissores: o contrato vai rejeitar (regras A1/R1).")
+        st.warning("Só o administrador gerencia emissores.")
     st.dataframe(pd.DataFrame([{
         "Instituição": e["nome"], "Conta": nome_conta(e["usuario"]), "Usuário": e["usuario"],
         "Ativo": "Sim" if e["ativo"] else "Não", "Autorizado no bloco": e["autorizado_no_bloco"],
