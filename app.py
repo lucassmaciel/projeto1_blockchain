@@ -465,7 +465,8 @@ def painel():
         st.markdown(PERMISSOES.get(papel, PERMISSOES_PADRAO))
 
     st.title(f"Olá, {logada.nome.split(' (')[0]}")
-    metricas_cadeia()
+    if papel_tela != "ALUNO":
+        metricas_cadeia()
     ordem = ORDEM_POR_PAPEL.get(papel, ORDEM_PADRAO)
     for chave, aba in zip(ordem, st.tabs([ABAS[k][0] for k in ordem])):
         with aba:
